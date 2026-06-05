@@ -1,140 +1,161 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, MessageCircle, Mail, MapPin, Facebook, Instagram, Youtube } from 'lucide-react';
+import { Zap, Facebook, Instagram, Youtube, Send, MessageCircle } from 'lucide-react';
+import { siteSettingsStore, socialMediaStore } from '@/lib/store';
+import { subscribeToStore } from '@/lib/events';
 
-const WA_NUMBER = '6281234567890';
-
-const quickLinks = [
-  { href: '/', label: 'Beranda' },
-  { href: '/products', label: 'Produk' },
-  { href: '/faq', label: 'FAQ' },
+const QUICK_LINKS = [
+  { href: '/products', label: 'Produk Digital' },
   { href: '/cara-transaksi', label: 'Cara Transaksi' },
   { href: '/cek-transaksi', label: 'Cek Transaksi' },
   { href: '/reseller', label: 'Reseller' },
+  { href: '/faq', label: 'FAQ' },
+  { href: '/kontak', label: 'Kontak' },
+];
+
+const PRODUCT_LINKS = [
+  { href: '/products', label: 'Pulsa & Data' },
+  { href: '/products', label: 'Top Up Game' },
+  { href: '/products', label: 'E-Wallet' },
+  { href: '/products', label: 'Token PLN' },
+  { href: '/products', label: 'PPOB' },
+  { href: '/products', label: 'Voucher Digital' },
 ];
 
 export default function Footer() {
+  const [settings, setSettings] = useState(siteSettingsStore.get());
+  const [social, setSocial] = useState(socialMediaStore.get());
+
+  useEffect(() => {
+    const u1 = subscribeToStore('siteSettings', () => setSettings(siteSettingsStore.get()));
+    const u2 = subscribeToStore('socialMedia', () => setSocial(socialMediaStore.get()));
+    return () => { u1(); u2(); };
+  }, []);
+
+  const waLink = `https://wa.me/${social.whatsapp}`;
+
   return (
-    <footer className="relative bg-brand-dark text-white overflow-hidden">
-      {/* Wave Top Divider */}
-      <div className="absolute top-0 left-0 right-0 overflow-hidden leading-none">
-        <svg viewBox="0 0 1200 80" preserveAspectRatio="none" className="w-full h-16 md:h-20 fill-background">
-          <path d="M0,40 C150,80 350,0 600,40 C850,80 1050,0 1200,40 L1200,0 L0,0 Z" />
+    <footer className="bg-brand-dark text-white relative overflow-hidden">
+      {/* Wave Divider */}
+      <div className="absolute top-0 left-0 right-0">
+        <svg viewBox="0 0 1440 60" preserveAspectRatio="none" className="w-full h-10 md:h-14" style={{ marginTop: '-1px' }}>
+          <path d="M0,60 L0,30 Q360,0 720,30 Q1080,60 1440,30 L1440,60 Z" className="fill-background" />
         </svg>
       </div>
 
-      <div className="container mx-auto px-4 pt-24 pb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-          {/* Brand */}
-          <div className="lg:col-span-1">
-            <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-green">
-                <Zap className="w-5 h-5 text-white fill-current" />
+      <div className="pt-14 md:pt-20 pb-6 relative z-10">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+            {/* Brand */}
+            <div className="col-span-2 md:col-span-1">
+              <Link to="/" className="flex items-center gap-2 mb-4">
+                {settings.logoDataUrl ? (
+                  <img src={settings.logoDataUrl} alt={settings.siteName} className="h-8 w-auto" />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
+                      <Zap className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="font-extrabold text-lg text-white">{settings.siteName}</span>
+                  </div>
+                )}
+              </Link>
+              <p className="text-white/60 text-sm leading-relaxed mb-4">
+                {settings.tagline}
+              </p>
+              <p className="text-white/40 text-xs mb-1">{settings.email}</p>
+              <p className="text-white/40 text-xs">{settings.address}</p>
+              {/* Social Media */}
+              <div className="flex gap-2 mt-4 flex-wrap">
+                {social.whatsapp && (
+                  <a href={waLink} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-primary/30 flex items-center justify-center transition-colors" title="WhatsApp">
+                    <MessageCircle className="w-4 h-4" />
+                  </a>
+                )}
+                {social.facebook && (
+                  <a href={social.facebook} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-blue-500/30 flex items-center justify-center transition-colors" title="Facebook">
+                    <Facebook className="w-4 h-4" />
+                  </a>
+                )}
+                {social.instagram && (
+                  <a href={social.instagram} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-pink-500/30 flex items-center justify-center transition-colors" title="Instagram">
+                    <Instagram className="w-4 h-4" />
+                  </a>
+                )}
+                {social.telegram && (
+                  <a href={social.telegram} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-blue-400/30 flex items-center justify-center transition-colors" title="Telegram">
+                    <Send className="w-4 h-4" />
+                  </a>
+                )}
+                {social.youtube && (
+                  <a href={social.youtube} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-red-500/30 flex items-center justify-center transition-colors" title="YouTube">
+                    <Youtube className="w-4 h-4" />
+                  </a>
+                )}
+                {social.tiktok && (
+                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-pink-600/30 flex items-center justify-center transition-colors" title="TikTok">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.35 6.35 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.84a8.19 8.19 0 004.88 1.58V7a4.85 4.85 0 01-1.11-.31z"/></svg>
+                  </a>
+                )}
               </div>
-              <div>
-                <span className="text-xl font-bold text-white leading-none block">SHIELACOM</span>
-                <span className="text-xs font-semibold text-primary leading-none block tracking-widest">CELL</span>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h3 className="font-bold text-white mb-4 text-sm">Menu Cepat</h3>
+              <ul className="space-y-2">
+                {QUICK_LINKS.map(link => (
+                  <li key={link.label}>
+                    <Link to={link.href} className="text-white/60 hover:text-white text-sm transition-colors hover:translate-x-0.5 inline-block">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Products */}
+            <div>
+              <h3 className="font-bold text-white mb-4 text-sm">Produk Kami</h3>
+              <ul className="space-y-2">
+                {PRODUCT_LINKS.map(link => (
+                  <li key={link.label}>
+                    <Link to={link.href} className="text-white/60 hover:text-white text-sm transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <h3 className="font-bold text-white mb-4 text-sm">Hubungi Kami</h3>
+              <div className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <MessageCircle className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-white/60 text-xs">WhatsApp / CS</p>
+                    <a href={waLink} target="_blank" rel="noopener noreferrer" className="text-white text-sm font-medium hover:text-primary transition-colors">
+                      +{social.whatsapp}
+                    </a>
+                  </div>
+                </div>
+                <a href={waLink} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all mt-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Chat via WhatsApp
+                </a>
               </div>
-            </Link>
-            <p className="text-white/60 text-sm leading-relaxed mb-4">
-              Pusat Top Up Game, Pulsa, Paket Data, E-Wallet, PLN, PPOB dan Produk Digital Terpercaya.
-            </p>
-            {/* Social Media */}
-            <div className="flex gap-3">
-              <a href="#" className="w-9 h-9 rounded-lg glass flex items-center justify-center text-white/60 hover:text-primary hover:bg-primary/20 transition-all">
-                <Facebook className="w-4 h-4" />
-              </a>
-              <a href="#" className="w-9 h-9 rounded-lg glass flex items-center justify-center text-white/60 hover:text-primary hover:bg-primary/20 transition-all">
-                <Instagram className="w-4 h-4" />
-              </a>
-              <a href="#" className="w-9 h-9 rounded-lg glass flex items-center justify-center text-white/60 hover:text-primary hover:bg-primary/20 transition-all">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.5a8.16 8.16 0 004.77 1.52V7.57a4.85 4.85 0 01-1-.88z"/>
-                </svg>
-              </a>
-              <a href="#" className="w-9 h-9 rounded-lg glass flex items-center justify-center text-white/60 hover:text-primary hover:bg-primary/20 transition-all">
-                <Youtube className="w-4 h-4" />
-              </a>
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Menu Cepat</h3>
-            <ul className="space-y-2">
-              {quickLinks.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    to={link.href}
-                    className="text-white/60 hover:text-primary text-sm transition-colors flex items-center gap-2 group"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          {/* Bottom */}
+          <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-white/40">
+            <p>© {new Date().getFullYear()} {settings.siteName}. All rights reserved.</p>
+            <p>Transaksi Digital Cepat, Murah, Aman & Terpercaya</p>
           </div>
-
-          {/* Products */}
-          <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Produk</h3>
-            <ul className="space-y-2">
-              {['Pulsa & Paket Data', 'E-Wallet', 'Top Up Game', 'Token PLN', 'PPOB', 'Voucher Digital'].map((item) => (
-                <li key={item}>
-                  <Link
-                    to="/products"
-                    className="text-white/60 hover:text-primary text-sm transition-colors flex items-center gap-2 group"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
-                    {item}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Contact */}
-          <div>
-            <h3 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Kontak</h3>
-            <ul className="space-y-3">
-              <li>
-                <a
-                  href={`https://wa.me/${WA_NUMBER}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-start gap-3 text-white/60 hover:text-primary transition-colors group"
-                >
-                  <MessageCircle className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
-                  <span className="text-sm">+62 812-3456-7890</span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="mailto:cs@shielacomcell.com"
-                  className="flex items-start gap-3 text-white/60 hover:text-primary transition-colors group"
-                >
-                  <Mail className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
-                  <span className="text-sm">cs@shielacomcell.com</span>
-                </a>
-              </li>
-              <li>
-                <div className="flex items-start gap-3 text-white/60">
-                  <MapPin className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
-                  <span className="text-sm">Indonesia</span>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Bottom Bar */}
-        <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
-          <p className="text-white/40 text-xs text-center md:text-left">
-            © {new Date().getFullYear()} SHIELACOM CELL. Hak Cipta Dilindungi.
-          </p>
-          <p className="text-white/40 text-xs text-center">
-            Transaksi Digital Cepat, Murah, Aman &amp; Terpercaya
-          </p>
         </div>
       </div>
     </footer>

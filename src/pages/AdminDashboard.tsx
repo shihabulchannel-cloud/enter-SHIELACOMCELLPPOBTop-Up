@@ -1,440 +1,349 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Image, HelpCircle, Receipt, LogOut, Zap, Plus, Trash2, Edit2, Check, X, Menu, ChevronRight
+  LayoutDashboard, Globe, Image, Package, Tag, Zap, CreditCard, TrendingUp, Users,
+  FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { isAdminLoggedIn, adminLogout } from '@/lib/admin-auth';
-import { bannerStore, faqStore, transactionStore, type Banner, type FAQItem, type Transaction } from '@/lib/store';
+import { notificationStore, logAction, transactionStore, depositStore, registrationStore, type Transaction } from '@/lib/store';
+import AdminOverview from '@/components/admin/AdminOverview';
+import WebsiteManagement from '@/components/admin/WebsiteManagement';
+import BannerManager from '@/components/admin/BannerManager';
+import ProductManager from '@/components/admin/ProductManager';
+import CategoryManager from '@/components/admin/CategoryManager';
+import ProviderSettings from '@/components/admin/ProviderSettings';
+import PaymentGatewaySettings from '@/components/admin/PaymentGatewaySettings';
+import MarkupSettings from '@/components/admin/MarkupSettings';
+import ResellerPanel from '@/components/admin/ResellerPanel';
+import ContentPanel from '@/components/admin/ContentPanel';
+import ReportsPanel from '@/components/admin/ReportsPanel';
+import SystemPanel from '@/components/admin/SystemPanel';
 import { cn } from '@/lib/utils';
 
-type Tab = 'overview' | 'banners' | 'faqs' | 'transactions';
+// ============================================================
+// NAV CONFIG
+// ============================================================
+type SectionKey =
+  | 'overview'
+  | 'website' | 'banners'
+  | 'products' | 'categories'
+  | 'provider' | 'payment' | 'markup'
+  | 'resellers' | 'deposits' | 'registrations'
+  | 'testimonials' | 'articles' | 'faqs'
+  | 'transactions' | 'reports'
+  | 'health' | 'logs' | 'notifications';
 
-const navItems: { id: Tab; icon: React.ElementType; label: string }[] = [
-  { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
-  { id: 'banners', icon: Image, label: 'Banner' },
-  { id: 'faqs', icon: HelpCircle, label: 'FAQ' },
-  { id: 'transactions', icon: Receipt, label: 'Transaksi' },
-];
-
-const statusColors: Record<string, string> = {
-  pending: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30',
-  processing: 'bg-blue-500/10 text-blue-600 border-blue-500/30',
-  success: 'bg-green-500/10 text-green-600 border-green-500/30',
-  failed: 'bg-red-500/10 text-red-600 border-red-500/30',
-};
-
-// ===== BANNER MANAGER =====
-function BannerManager() {
-  const [banners, setBanners] = useState<Banner[]>([]);
-  const [newBanner, setNewBanner] = useState({ title: '', subtitle: '', badge: '', theme: 'all' as Banner['theme'] });
-  const [adding, setAdding] = useState(false);
-
-  useEffect(() => {
-    setBanners(bannerStore.get());
-  }, []);
-
-  const handleAdd = () => {
-    if (!newBanner.title.trim()) return;
-    bannerStore.add(newBanner);
-    setBanners(bannerStore.get());
-    setNewBanner({ title: '', subtitle: '', badge: '', theme: 'all' });
-    setAdding(false);
-  };
-
-  const handleRemove = (id: string) => {
-    bannerStore.remove(id);
-    setBanners(bannerStore.get());
-  };
-
-  const themeLabel: Record<Banner['theme'], string> = {
-    game: 'Top Up Game',
-    pulsa: 'Pulsa & E-Wallet',
-    pln: 'PLN & PPOB',
-    all: 'Semua Layanan',
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-foreground">Kelola Banner</h2>
-        <Button
-          onClick={() => setAdding(!adding)}
-          size="sm"
-          className="bg-primary text-primary-foreground btn-glow shadow-green rounded-xl gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Banner
-        </Button>
-      </div>
-
-      {adding && (
-        <div className="bg-card border border-border rounded-2xl p-5 mb-6 animate-scale-in">
-          <h3 className="font-semibold text-foreground mb-4">Banner Baru</h3>
-          <div className="space-y-3">
-            <Input value={newBanner.title} onChange={e => setNewBanner(p => ({ ...p, title: e.target.value }))} placeholder="Judul banner *" className="rounded-xl" />
-            <Input value={newBanner.subtitle} onChange={e => setNewBanner(p => ({ ...p, subtitle: e.target.value }))} placeholder="Sub judul banner" className="rounded-xl" />
-            <Input value={newBanner.badge} onChange={e => setNewBanner(p => ({ ...p, badge: e.target.value }))} placeholder="Badge text (e.g. Top Up Game)" className="rounded-xl" />
-            <select
-              value={newBanner.theme}
-              onChange={e => setNewBanner(p => ({ ...p, theme: e.target.value as Banner['theme'] }))}
-              className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
-            >
-              <option value="game">Top Up Game</option>
-              <option value="pulsa">Pulsa & E-Wallet</option>
-              <option value="pln">PLN & PPOB</option>
-              <option value="all">Semua Layanan</option>
-            </select>
-            <div className="flex gap-2">
-              <Button onClick={handleAdd} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow">
-                <Check className="w-4 h-4" /> Simpan
-              </Button>
-              <Button onClick={() => setAdding(false)} size="sm" variant="outline" className="rounded-xl gap-1">
-                <X className="w-4 h-4" /> Batal
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {banners.map((banner, i) => (
-          <div key={banner.id} className="bg-card border border-border rounded-2xl p-4 flex items-start justify-between gap-4 group">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
-                {i + 1}
-              </div>
-              <div>
-                <p className="font-semibold text-foreground text-sm">{banner.title}</p>
-                <p className="text-muted-foreground text-xs mt-0.5 line-clamp-1">{banner.subtitle}</p>
-                <Badge className="mt-1 text-xs bg-primary/10 text-primary border-primary/20">{themeLabel[banner.theme]}</Badge>
-              </div>
-            </div>
-            <button
-              onClick={() => handleRemove(banner.id)}
-              className="text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+interface NavItem {
+  key: SectionKey;
+  label: string;
+  icon: React.FC<{ className?: string }>;
+  badge?: number;
 }
 
-// ===== FAQ MANAGER =====
-function FAQManager() {
-  const [faqs, setFaqs] = useState<FAQItem[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ question: '', answer: '' });
-
-  useEffect(() => {
-    setFaqs(faqStore.get());
-  }, []);
-
-  const handleAdd = () => {
-    if (!form.question.trim() || !form.answer.trim()) return;
-    faqStore.add(form);
-    setFaqs(faqStore.get());
-    setForm({ question: '', answer: '' });
-    setAdding(false);
-  };
-
-  const handleUpdate = (id: string) => {
-    if (!form.question.trim() || !form.answer.trim()) return;
-    faqStore.update(id, form);
-    setFaqs(faqStore.get());
-    setEditing(null);
-  };
-
-  const handleRemove = (id: string) => {
-    faqStore.remove(id);
-    setFaqs(faqStore.get());
-  };
-
-  const startEdit = (faq: FAQItem) => {
-    setForm({ question: faq.question, answer: faq.answer });
-    setEditing(faq.id);
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-foreground">Kelola FAQ</h2>
-        <Button onClick={() => { setAdding(!adding); setEditing(null); }} size="sm" className="bg-primary text-primary-foreground btn-glow shadow-green rounded-xl gap-2">
-          <Plus className="w-4 h-4" />
-          Tambah FAQ
-        </Button>
-      </div>
-
-      {adding && (
-        <div className="bg-card border border-border rounded-2xl p-5 mb-6 animate-scale-in">
-          <h3 className="font-semibold text-foreground mb-4">FAQ Baru</h3>
-          <div className="space-y-3">
-            <Input value={form.question} onChange={e => setForm(p => ({ ...p, question: e.target.value }))} placeholder="Pertanyaan *" className="rounded-xl" />
-            <textarea
-              value={form.answer}
-              onChange={e => setForm(p => ({ ...p, answer: e.target.value }))}
-              placeholder="Jawaban *"
-              rows={3}
-              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <div className="flex gap-2">
-              <Button onClick={handleAdd} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow">
-                <Check className="w-4 h-4" /> Simpan
-              </Button>
-              <Button onClick={() => setAdding(false)} size="sm" variant="outline" className="rounded-xl gap-1">
-                <X className="w-4 h-4" /> Batal
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {faqs.map((faq, i) => (
-          <div key={faq.id} className="bg-card border border-border rounded-2xl overflow-hidden">
-            {editing === faq.id ? (
-              <div className="p-4 space-y-3">
-                <Input value={form.question} onChange={e => setForm(p => ({ ...p, question: e.target.value }))} placeholder="Pertanyaan" className="rounded-xl" />
-                <textarea
-                  value={form.answer}
-                  onChange={e => setForm(p => ({ ...p, answer: e.target.value }))}
-                  rows={3}
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <div className="flex gap-2">
-                  <Button onClick={() => handleUpdate(faq.id)} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow">
-                    <Check className="w-4 h-4" /> Simpan
-                  </Button>
-                  <Button onClick={() => setEditing(null)} size="sm" variant="outline" className="rounded-xl gap-1">
-                    <X className="w-4 h-4" /> Batal
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 flex items-start justify-between gap-4 group">
-                <div className="flex items-start gap-3 min-w-0">
-                  <span className="w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-foreground text-sm">{faq.question}</p>
-                    <p className="text-muted-foreground text-xs mt-1 line-clamp-2">{faq.answer}</p>
-                  </div>
-                </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                  <button onClick={() => startEdit(faq)} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors">
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => handleRemove(faq.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-destructive transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+interface NavGroup {
+  group: string;
+  items: NavItem[];
 }
 
-// ===== TRANSACTION LIST =====
-function TransactionList() {
-  const [transactions] = useState<Transaction[]>(transactionStore.get());
-
-  return (
-    <div>
-      <h2 className="text-xl font-bold text-foreground mb-6">Daftar Transaksi</h2>
-      <div className="space-y-3">
-        {transactions.map(tx => (
-          <div key={tx.id} className="bg-card border border-border rounded-2xl p-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <p className="font-bold text-foreground text-sm">{tx.invoiceId}</p>
-                <p className="text-foreground text-sm mt-0.5">{tx.product}</p>
-                <p className="text-muted-foreground text-xs">Tujuan: {tx.destination}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-primary">Rp {tx.amount.toLocaleString('id-ID')}</p>
-                <Badge className={cn('mt-1 text-xs border font-semibold', statusColors[tx.status])}>
-                  {tx.status === 'pending' ? 'Menunggu' : tx.status === 'processing' ? 'Diproses' : tx.status === 'success' ? 'Berhasil' : 'Gagal'}
-                </Badge>
-                <p className="text-muted-foreground text-xs mt-1">{tx.createdAt}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function buildNav(unreadNotifs: number, pendingDeposits: number, pendingRegs: number): NavGroup[] {
+  return [
+    {
+      group: 'Utama',
+      items: [
+        { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+      ],
+    },
+    {
+      group: 'Website',
+      items: [
+        { key: 'website', label: 'Pengaturan Website', icon: Globe },
+        { key: 'banners', label: 'Banner & Slider', icon: Image },
+      ],
+    },
+    {
+      group: 'Produk',
+      items: [
+        { key: 'products', label: 'Daftar Produk', icon: Package },
+        { key: 'categories', label: 'Kategori', icon: Tag },
+        { key: 'provider', label: 'Provider (Digiflazz)', icon: Zap },
+        { key: 'payment', label: 'Payment Gateway', icon: CreditCard },
+        { key: 'markup', label: 'Markup Harga', icon: TrendingUp },
+      ],
+    },
+    {
+      group: 'Reseller',
+      items: [
+        { key: 'resellers', label: 'Daftar Reseller', icon: Users },
+        { key: 'deposits', label: 'Deposit', icon: CreditCard, badge: pendingDeposits || undefined },
+        { key: 'registrations', label: 'Pendaftaran', icon: FileText, badge: pendingRegs || undefined },
+      ],
+    },
+    {
+      group: 'Konten',
+      items: [
+        { key: 'testimonials', label: 'Testimoni', icon: FileText },
+        { key: 'articles', label: 'Artikel/Blog', icon: FileText },
+        { key: 'faqs', label: 'FAQ', icon: FileText },
+      ],
+    },
+    {
+      group: 'Laporan',
+      items: [
+        { key: 'transactions', label: 'Transaksi', icon: BarChart2 },
+        { key: 'reports', label: 'Statistik', icon: TrendingUp },
+      ],
+    },
+    {
+      group: 'Sistem',
+      items: [
+        { key: 'health', label: 'System Health', icon: Activity },
+        { key: 'logs', label: 'System Logs', icon: FileText },
+        { key: 'notifications', label: 'Notifikasi', icon: Bell, badge: unreadNotifs || undefined },
+      ],
+    },
+  ];
 }
 
-// ===== OVERVIEW =====
-function Overview() {
-  const banners = bannerStore.get();
-  const faqs = faqStore.get();
-  const transactions = transactionStore.get();
-  const successTx = transactions.filter(t => t.status === 'success').length;
+// ============================================================
+// TRANSACTIONS TABLE (inline)
+// ============================================================
+function TransactionsTable() {
+  const txs = transactionStore.get();
+  const STATUS_CFG: Record<string, { label: string; cls: string }> = {
+    pending: { label: 'Pending', cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
+    processing: { label: 'Diproses', cls: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
+    success: { label: 'Sukses', cls: 'bg-green-500/10 text-green-600 border-green-500/30' },
+    failed: { label: 'Gagal', cls: 'bg-red-500/10 text-red-500 border-red-500/30' },
+  };
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-foreground mb-6">Dashboard Overview</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: 'Total Banner', value: banners.length, icon: Image, color: 'bg-blue-500/10 text-blue-600' },
-          { label: 'Total FAQ', value: faqs.length, icon: HelpCircle, color: 'bg-purple-500/10 text-purple-600' },
-          { label: 'Total Transaksi', value: transactions.length, icon: Receipt, color: 'bg-orange-500/10 text-orange-600' },
-          { label: 'Transaksi Sukses', value: successTx, icon: Check, color: 'bg-primary/10 text-primary' },
-        ].map(item => {
-          const Icon = item.icon;
-          return (
-            <div key={item.label} className="bg-card border border-border rounded-2xl p-5">
-              <div className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center mb-3`}>
-                <Icon className="w-5 h-5" />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{item.value}</p>
-              <p className="text-muted-foreground text-xs mt-1">{item.label}</p>
-            </div>
-          );
-        })}
+      <div className="mb-4">
+        <h2 className="text-xl font-bold text-foreground">Riwayat Transaksi</h2>
+        <p className="text-muted-foreground text-sm">{txs.length} transaksi total</p>
       </div>
-
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <h3 className="font-semibold text-foreground mb-4">Transaksi Terbaru</h3>
-        <div className="space-y-3">
-          {transactions.slice(0, 5).map(tx => (
-            <div key={tx.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-              <div>
-                <p className="text-sm font-medium text-foreground">{tx.product}</p>
-                <p className="text-xs text-muted-foreground">{tx.invoiceId}</p>
-              </div>
-              <Badge className={cn('text-xs border font-semibold', statusColors[tx.status])}>
-                {tx.status === 'success' ? 'Sukses' : tx.status === 'pending' ? 'Pending' : tx.status === 'processing' ? 'Proses' : 'Gagal'}
-              </Badge>
-            </div>
-          ))}
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Invoice</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Produk</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tujuan</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Nominal</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Profit</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {txs.map((tx: Transaction) => {
+                const cfg = STATUS_CFG[tx.status] || STATUS_CFG.pending;
+                return (
+                  <tr key={tx.id} className="border-b border-border/30 last:border-0 hover:bg-muted/10 transition-colors">
+                    <td className="px-4 py-3 text-xs font-medium text-primary">{tx.invoiceId}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">{tx.product}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{tx.destination}</td>
+                    <td className="px-4 py-3 text-sm text-foreground font-medium text-right">Rp {tx.amount.toLocaleString('id-ID')}</td>
+                    <td className="px-4 py-3 text-sm text-primary font-medium text-right">+Rp {(tx.profit || 0).toLocaleString('id-ID')}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn('text-xs font-semibold px-2 py-1 rounded-full border', cfg.cls)}>{cfg.label}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {txs.length === 0 && <div className="text-center py-12 text-muted-foreground">Belum ada transaksi</div>}
         </div>
       </div>
     </div>
   );
 }
 
-// ===== MAIN DASHBOARD =====
+// ============================================================
+// CONTENT ROUTER
+// ============================================================
+function SectionContent({ section, navigate: nav }: { section: SectionKey; navigate: (s: SectionKey) => void }) {
+  switch (section) {
+    case 'overview': return <AdminOverview onNavigate={(s) => nav(s as SectionKey)} />;
+    case 'website': return <WebsiteManagement defaultSection="general" />;
+    case 'banners': return <BannerManager />;
+    case 'products': return <ProductManager />;
+    case 'categories': return <CategoryManager />;
+    case 'provider': return <ProviderSettings defaultTab="digiflazz" />;
+    case 'payment': return <PaymentGatewaySettings />;
+    case 'markup': return <MarkupSettings />;
+    case 'resellers': return <ResellerPanel defaultTab="resellers" />;
+    case 'deposits': return <ResellerPanel defaultTab="deposits" />;
+    case 'registrations': return <ResellerPanel defaultTab="registrations" />;
+    case 'testimonials': return <ContentPanel defaultTab="testimonials" />;
+    case 'articles': return <ContentPanel defaultTab="articles" />;
+    case 'faqs': return <ContentPanel defaultTab="faqs" />;
+    case 'transactions': return <TransactionsTable />;
+    case 'reports': return <ReportsPanel />;
+    case 'health': return <SystemPanel defaultTab="health" />;
+    case 'logs': return <SystemPanel defaultTab="logs" />;
+    case 'notifications': return <SystemPanel defaultTab="notifications" />;
+    default: return <AdminOverview onNavigate={(s) => nav(s as SectionKey)} />;
+  }
+}
+
+// ============================================================
+// MAIN DASHBOARD
+// ============================================================
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [section, setSection] = useState<SectionKey>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [pendingDeposits, setPendingDeposits] = useState(0);
+  const [pendingRegs, setPendingRegs] = useState(0);
 
   useEffect(() => {
     if (!isAdminLoggedIn()) {
       navigate('/admin');
+      return;
     }
-  }, [navigate]);
+    refreshBadges();
+    logAction('LOGIN', 'Admin membuka dashboard');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshBadges = () => {
+    setUnreadNotifs(notificationStore.unread());
+    setPendingDeposits(depositStore.get().filter((d) => d.status === 'pending').length);
+    setPendingRegs(registrationStore.get().filter((r) => r.status === 'pending').length);
+  };
+
+  const navGroups = buildNav(unreadNotifs, pendingDeposits, pendingRegs);
+
+  const handleNavigate = (key: SectionKey) => {
+    setSection(key);
+    setSidebarOpen(false);
+    refreshBadges();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleLogout = () => {
+    logAction('LOGOUT', 'Admin logout dari dashboard');
     adminLogout();
     navigate('/admin');
   };
 
+  const currentNavItem = navGroups.flatMap(g => g.items).find(i => i.key === section);
+
+  const Sidebar = ({ mobile }: { mobile?: boolean }) => (
+    <div className={cn('flex flex-col h-full', mobile ? 'w-full' : '')}>
+      {/* Logo */}
+      <div className="px-4 py-5 border-b border-border">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
+            <Shield className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <p className="font-bold text-foreground text-sm leading-none">SHIELACOM CELL</p>
+            <p className="text-muted-foreground text-xs mt-0.5">Admin Panel</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto scrollbar-hidden px-3 py-3 space-y-4">
+        {navGroups.map(group => (
+          <div key={group.group}>
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider px-2 mb-1">{group.group}</p>
+            <div className="space-y-0.5">
+              {group.items.map(item => {
+                const Icon = item.icon;
+                const active = section === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => handleNavigate(item.key)}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left',
+                      active
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    )}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {item.badge ? (
+                      <span className={cn('text-xs font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1', active ? 'bg-white/30 text-white' : 'bg-red-500 text-white')}>
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-3 py-3 border-t border-border space-y-1">
+        <button onClick={() => window.open('/', '_blank')} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all text-left">
+          <Globe className="w-4 h-4 flex-shrink-0" />
+          <span>Lihat Website</span>
+        </button>
+        <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all text-left">
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span>Logout</span>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <aside className={cn(
-        'fixed inset-y-0 left-0 z-50 w-64 bg-brand-dark flex flex-col transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      )}>
-        {/* Logo */}
-        <div className="p-5 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-green">
-              <Zap className="w-5 h-5 text-white fill-current" />
-            </div>
-            <div>
-              <span className="text-sm font-bold text-white leading-none block">SHIELACOM</span>
-              <span className="text-xs text-primary font-semibold leading-none block">ADMIN PANEL</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
-                className={cn(
-                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all',
-                  activeTab === item.id
-                    ? 'bg-primary text-white shadow-green'
-                    : 'text-white/60 hover:text-white hover:bg-white/10'
-                )}
-              >
-                <Icon className="w-5 h-5" />
-                {item.label}
-                {activeTab === item.id && <ChevronRight className="w-4 h-4 ml-auto" />}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Logout */}
-        <div className="p-3 border-t border-white/10">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-red-400 hover:bg-red-500/10 transition-all"
-          >
-            <LogOut className="w-5 h-5" />
-            Keluar
-          </button>
-        </div>
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex flex-col w-60 xl:w-64 flex-shrink-0 bg-card border-r border-border sticky top-0 h-screen overflow-hidden">
+        <Sidebar />
       </aside>
 
-      {/* Overlay */}
+      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-64 bg-card border-r border-border z-10 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-border">
+              <p className="font-bold text-sm text-foreground">Menu</p>
+              <button onClick={() => setSidebarOpen(false)} className="p-1 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="h-[calc(100%-57px)] overflow-y-auto">
+              <Sidebar mobile />
+            </div>
+          </aside>
+        </div>
       )}
 
-      {/* Main */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <header className="h-16 bg-background border-b border-border flex items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-xl hover:bg-muted text-foreground"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="font-bold text-foreground text-base">{navItems.find(n => n.id === activeTab)?.label}</h1>
-              <p className="text-muted-foreground text-xs">SHIELACOM CELL Admin</p>
-            </div>
+        <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 md:px-6 h-14 flex items-center gap-3">
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-xl hover:bg-muted transition-colors">
+            <Menu className="w-5 h-5 text-foreground" />
+          </button>
+          <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
+            <span>Admin</span>
+            <ChevronRight className="w-3 h-3" />
+            <span className="text-foreground font-medium">{currentNavItem?.label || 'Dashboard'}</span>
           </div>
-          <Button
-            onClick={handleLogout}
-            size="sm"
-            variant="ghost"
-            className="gap-2 text-muted-foreground hover:text-destructive rounded-xl"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Keluar</span>
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => handleNavigate('notifications')} className="relative p-2 rounded-xl hover:bg-muted transition-colors">
+              <Bell className="w-4 h-4 text-foreground" />
+              {unreadNotifs > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+              )}
+            </button>
+          </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
-          {activeTab === 'overview' && <Overview />}
-          {activeTab === 'banners' && <BannerManager />}
-          {activeTab === 'faqs' && <FAQManager />}
-          {activeTab === 'transactions' && <TransactionList />}
+        <main className="flex-1 p-4 md:p-6">
+          <SectionContent section={section} navigate={handleNavigate} />
         </main>
       </div>
     </div>
