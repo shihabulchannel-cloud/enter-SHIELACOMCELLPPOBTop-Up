@@ -59,19 +59,31 @@ function StatusBadge({ connected }: { connected: boolean }) {
   );
 }
 
+interface SyncLog {
+  success: boolean;
+  error?: string;
+  detail?: unknown;
+  synced?: number;
+  skipped?: number;
+  total?: number;
+  db_errors?: string[];
+  logs?: string[];
+  timestamp?: string;
+}
+
 function DigiflazzSettings() {
   const [cfg, setCfg] = useState(providerConfigStore.get().digiflazz);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState('');
+  const [syncLog, setSyncLog] = useState<SyncLog | null>(null);
+  const [showRawLog, setShowRawLog] = useState(false);
   const f = (k: keyof typeof cfg) => (v: string | boolean | number) => setCfg(p => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
     const all = providerConfigStore.get();
     providerConfigStore.set({ ...all, digiflazz: cfg });
-    // Also save to database
     await supabase.from('sc_digiflazz_config').upsert({
       username: cfg.username,
       api_key: cfg.apiKey,
@@ -97,27 +109,32 @@ function DigiflazzSettings() {
 
   const handleSync = async () => {
     if (!cfg.username || !cfg.apiKey) {
-      setSyncResult('Harap isi Username dan API Key Digiflazz terlebih dahulu');
+      setSyncLog({ success: false, error: 'Harap isi Username dan API Key Digiflazz terlebih dahulu', timestamp: new Date().toLocaleString('id-ID') });
       return;
     }
     setSyncing(true);
-    setSyncResult('');
+    setSyncLog(null);
+    setShowRawLog(false);
     try {
+      // Ensure config is saved before sync
       await supabase.from('sc_digiflazz_config').upsert({
-        username: cfg.username,
-        api_key: cfg.apiKey,
-        webhook_secret: '',
-        active: true,
+        username: cfg.username, api_key: cfg.apiKey, webhook_secret: '', active: true,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });
 
       const { data, error } = await supabase.functions.invoke('sync-products');
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      setSyncResult(`Berhasil sync ${data.synced} produk dari Digiflazz! (${data.skipped} dilewati)`);
-      logAction('DIGIFLAZZ_SYNC', `Sync ${data.synced} produk dari Digiflazz`);
+
+      // Edge function always returns 200, so error here means network/auth issue
+      if (error) {
+        setSyncLog({ success: false, error: `Gagal memanggil backend: ${error.message}`, logs: [], timestamp: new Date().toLocaleString('id-ID') });
+        return;
+      }
+
+      const result: SyncLog = { ...data, timestamp: new Date().toLocaleString('id-ID') };
+      setSyncLog(result);
+      if (result.success) logAction('DIGIFLAZZ_SYNC', `Sync ${result.synced} produk dari Digiflazz`);
     } catch (e: unknown) {
-      setSyncResult(`Gagal sync: ${e instanceof Error ? e.message : 'Error tidak diketahui'}`);
+      setSyncLog({ success: false, error: e instanceof Error ? e.message : 'Error tidak diketahui', timestamp: new Date().toLocaleString('id-ID') });
     } finally {
       setSyncing(false);
     }
@@ -145,14 +162,12 @@ function DigiflazzSettings() {
           <ProviderField label="Username Digiflazz" value={cfg.username} onChange={f('username')} placeholder="username digiflazz" />
           <ProviderField label="API Key" value={cfg.apiKey} onChange={f('apiKey')} type="password" placeholder="API key rahasia" />
         </div>
-
         {testResult && (
           <div className={cn('flex items-start gap-2 p-3 rounded-xl text-sm', testResult.ok ? 'bg-green-500/10 text-green-700' : 'bg-red-500/10 text-red-600')}>
             {testResult.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
             {testResult.msg}
           </div>
         )}
-
         <div className="flex gap-2 flex-wrap">
           <Button onClick={handleTest} disabled={testing} size="sm" variant="outline" className="rounded-xl gap-2">
             {testing ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Wifi className="w-4 h-4" />}
@@ -164,58 +179,102 @@ function DigiflazzSettings() {
         </div>
       </div>
 
-      {/* Webhook URL - Auto-generated, read-only */}
+      {/* Webhook URL */}
       <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Info className="w-4 h-4 text-primary flex-shrink-0" />
           <h4 className="font-semibold text-foreground text-sm">Webhook URL (Auto-Generate)</h4>
         </div>
-
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-foreground space-y-2">
           <p className="font-semibold text-primary">Apa itu Webhook URL?</p>
           <p className="text-muted-foreground leading-relaxed">
-            Webhook URL adalah alamat yang harus Anda daftarkan di dashboard Digiflazz agar sistem menerima notifikasi otomatis saat transaksi selesai (sukses/gagal). URL ini sudah otomatis dibuat oleh sistem.
+            Webhook URL adalah alamat yang harus Anda daftarkan di dashboard Digiflazz agar sistem menerima notifikasi otomatis saat transaksi selesai (sukses/gagal).
           </p>
         </div>
-
         <CopyableUrl url={DIGIFLAZZ_WEBHOOK_URL} label="Webhook URL — Salin & daftarkan di Digiflazz" />
-
         <div className="bg-muted rounded-xl p-4 space-y-2">
           <p className="text-sm font-semibold text-foreground">Cara memasang di Digiflazz:</p>
           <ol className="space-y-1.5">
-            {[
-              'Login ke dashboard Digiflazz (digiflazz.com)',
-              'Buka menu Pengaturan > Webhook / Callback URL',
-              'Salin URL di atas lalu tempel di kolom Webhook URL',
-              'Klik Simpan / Update',
-            ].map((step, i) => (
+            {['Login ke dashboard Digiflazz (digiflazz.com)', 'Buka menu Pengaturan > Webhook / Callback URL', 'Salin URL di atas lalu tempel di kolom Webhook URL', 'Klik Simpan / Update'].map((step, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                 <span className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5">{i + 1}</span>
                 {step}
               </li>
             ))}
           </ol>
-          <a
-            href="https://digiflazz.com/dashboard/settings"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-primary text-xs font-semibold hover:underline mt-1"
-          >
+          <a href="https://digiflazz.com/dashboard/settings" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary text-xs font-semibold hover:underline mt-1">
             <ExternalLink className="w-3.5 h-3.5" /> Buka Dashboard Digiflazz
           </a>
         </div>
       </div>
 
       {/* Sync */}
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <h4 className="font-semibold text-foreground mb-2">Sinkronisasi Produk</h4>
-        <p className="text-muted-foreground text-sm mb-4">Sync produk dari Digiflazz ke website secara otomatis. Data yang disinkronkan: nama, harga, kategori, brand, kode produk, dan status.</p>
-        {syncResult && (
-          <div className={cn('flex items-start gap-2 p-3 rounded-xl text-sm mb-3', syncResult.includes('Berhasil') ? 'bg-green-500/10 text-green-700' : 'bg-yellow-500/10 text-yellow-700')}>
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            {syncResult}
+      <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+        <div>
+          <h4 className="font-semibold text-foreground mb-1">Sinkronisasi Produk</h4>
+          <p className="text-muted-foreground text-sm">Sync semua produk dari Digiflazz ke database website (nama, harga, kategori, brand, kode produk, status).</p>
+        </div>
+
+        {/* Sync Result Summary */}
+        {syncLog && (
+          <div className={cn('rounded-2xl border p-4 space-y-3', syncLog.success ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20')}>
+            <div className="flex items-center gap-2">
+              {syncLog.success ? <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" /> : <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />}
+              <span className={cn('font-semibold text-sm', syncLog.success ? 'text-green-700' : 'text-red-600')}>
+                {syncLog.success ? 'Sinkronisasi Berhasil!' : 'Sinkronisasi Gagal'}
+              </span>
+              <span className="text-xs text-muted-foreground ml-auto">{syncLog.timestamp}</span>
+            </div>
+
+            {syncLog.success && (
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Total Diterima', value: syncLog.total ?? 0, color: 'text-foreground' },
+                  { label: 'Berhasil Simpan', value: syncLog.synced ?? 0, color: 'text-green-600' },
+                  { label: 'Dilewati', value: syncLog.skipped ?? 0, color: 'text-yellow-600' },
+                ].map(s => (
+                  <div key={s.label} className="bg-background rounded-xl p-3 text-center border border-border">
+                    <p className={cn('text-2xl font-bold', s.color)}>{s.value.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {syncLog.error && (
+              <div className="bg-red-500/10 rounded-xl p-3 text-sm text-red-700 font-mono break-all">
+                {syncLog.error}
+              </div>
+            )}
+
+            {syncLog.db_errors && syncLog.db_errors.length > 0 && (
+              <div className="bg-yellow-500/10 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-yellow-700">Error Database ({syncLog.db_errors.length}):</p>
+                {syncLog.db_errors.map((e, i) => <p key={i} className="text-xs text-yellow-700 font-mono">{e}</p>)}
+              </div>
+            )}
+
+            {/* Raw Log Toggle */}
+            {syncLog.logs && syncLog.logs.length > 0 && (
+              <div>
+                <button onClick={() => setShowRawLog(v => !v)} className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {showRawLog ? 'Sembunyikan' : 'Lihat'} Log Detail ({syncLog.logs.length} baris)
+                </button>
+                {showRawLog && (
+                  <div className="mt-2 bg-slate-900 rounded-xl p-3 max-h-64 overflow-y-auto">
+                    {syncLog.logs.map((line, i) => (
+                      <p key={i} className={cn('text-xs font-mono leading-5', line.startsWith('ERROR') || line.startsWith('EXCEPTION') ? 'text-red-400' : line.startsWith('OK') || line.startsWith('SUKSES') || line.includes('berhasil') ? 'text-green-400' : line.startsWith('STEP') ? 'text-yellow-300' : line.startsWith('===') ? 'text-cyan-300 font-bold' : 'text-slate-300')}>
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
+
         <Button onClick={handleSync} disabled={syncing} className="bg-primary text-primary-foreground btn-glow rounded-xl gap-2 w-full sm:w-auto">
           {syncing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           {syncing ? 'Sedang Sync...' : 'SYNC PRODUK DIGIFLAZZ'}
