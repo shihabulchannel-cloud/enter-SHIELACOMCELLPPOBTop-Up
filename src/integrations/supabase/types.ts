@@ -3147,6 +3147,7 @@ export type Database = {
           active: boolean | null
           api_key: string | null
           id: string
+          provider: string
           updated_at: string | null
           username: string | null
           webhook_secret: string | null
@@ -3155,6 +3156,7 @@ export type Database = {
           active?: boolean | null
           api_key?: string | null
           id?: string
+          provider?: string
           updated_at?: string | null
           username?: string | null
           webhook_secret?: string | null
@@ -3163,6 +3165,7 @@ export type Database = {
           active?: boolean | null
           api_key?: string | null
           id?: string
+          provider?: string
           updated_at?: string | null
           username?: string | null
           webhook_secret?: string | null

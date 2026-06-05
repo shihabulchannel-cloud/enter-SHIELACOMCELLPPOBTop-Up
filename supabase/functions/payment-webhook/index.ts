@@ -57,7 +57,14 @@ const corsHeaders = {
 };
 
 async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, order: Record<string, unknown>) {
-  const { data: dfConfig } = await supabase.from("sc_digiflazz_config").select("*").eq("active", true).maybeSingle();
+  const { data: dfConfig } = await supabase
+    .from("sc_digiflazz_config")
+    .select("*")
+    .eq("provider", "digiflazz")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   if (!dfConfig?.username || !dfConfig?.api_key) {
     await supabase.from("sc_orders").update({ order_status: "processing", notes: "Menunggu diproses admin", updated_at: new Date().toISOString() }).eq("id", order.id);
     return;
@@ -66,7 +73,6 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
   if (!product) return;
 
   const refId = `${order.invoice_id}-${Date.now()}`;
-  // Signature resmi Digiflazz: md5(username + api_key + ref_id)
   const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
 
   try {

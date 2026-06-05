@@ -84,13 +84,15 @@ function DigiflazzSettings() {
   const handleSave = async () => {
     const all = providerConfigStore.get();
     providerConfigStore.set({ ...all, digiflazz: cfg });
+    // upsert berdasarkan 'provider' (unique constraint) — tidak pernah buat duplikat
     await supabase.from('sc_digiflazz_config').upsert({
+      provider: 'digiflazz',
       username: cfg.username,
       api_key: cfg.apiKey,
       webhook_secret: '',
       active: cfg.enabled,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    }, { onConflict: 'provider' });
     logAction('DIGIFLAZZ_SAVE', 'Simpan konfigurasi Digiflazz');
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -116,11 +118,11 @@ function DigiflazzSettings() {
     setSyncLog(null);
     setShowRawLog(false);
     try {
-      // Ensure config is saved before sync
+      // Ensure config is saved before sync (upsert by provider — never duplicates)
       await supabase.from('sc_digiflazz_config').upsert({
-        username: cfg.username, api_key: cfg.apiKey, webhook_secret: '', active: true,
+        provider: 'digiflazz', username: cfg.username, api_key: cfg.apiKey, webhook_secret: '', active: true,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' });
+      }, { onConflict: 'provider' });
 
       const { data, error } = await supabase.functions.invoke('sync-products');
 

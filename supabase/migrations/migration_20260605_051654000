@@ -1,0 +1,48 @@
+-- ============================================================
+-- STEP 1: Hapus semua duplikat, sisakan 1 baris terbaru dengan kredensial
+-- ============================================================
+DELETE FROM sc_digiflazz_config
+WHERE id NOT IN (
+  SELECT id FROM sc_digiflazz_config
+  WHERE username IS NOT NULL AND username != ''
+  ORDER BY updated_at DESC
+  LIMIT 1
+);
+
+-- Jika setelah step 1 masih ada lebih dari 1 row (edge case), hapus lagi
+DELETE FROM sc_digiflazz_config
+WHERE id NOT IN (
+  SELECT id FROM sc_digiflazz_config
+  ORDER BY updated_at DESC
+  LIMIT 1
+);
+
+-- ============================================================
+-- STEP 2: Tambah kolom 'provider' sebagai kunci singleton
+-- ============================================================
+ALTER TABLE sc_digiflazz_config
+  ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'digiflazz';
+
+-- Set nilai provider untuk row yang ada
+UPDATE sc_digiflazz_config SET provider = 'digiflazz';
+
+-- ============================================================
+-- STEP 3: Tambah UNIQUE CONSTRAINT agar tidak bisa duplikat lagi
+-- ============================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'sc_digiflazz_config_provider_unique'
+  ) THEN
+    ALTER TABLE sc_digiflazz_config
+      ADD CONSTRAINT sc_digiflazz_config_provider_unique UNIQUE (provider);
+  END IF;
+END $$;
+
+-- ============================================================
+-- STEP 4: Pastikan ada tepat 1 baris default jika tabel kosong
+-- ============================================================
+INSERT INTO sc_digiflazz_config (provider, username, api_key, webhook_secret, active, updated_at)
+VALUES ('digiflazz', '', '', '', false, now())
+ON CONFLICT (provider) DO NOTHING;
