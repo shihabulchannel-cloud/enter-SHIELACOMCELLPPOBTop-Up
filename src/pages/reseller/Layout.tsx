@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Package, Wallet, ArrowDownToLine, History, ArrowLeftRight, User, Lock, LifeBuoy, LogOut, Menu, X, ChevronRight } from 'lucide-react';
-import { getResellerSession, resellerLogout } from '@/lib/reseller-auth';
+import { getResellerSession, resellerLogout, updateResellerBalance } from '@/lib/reseller-auth';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 const MENU = [
@@ -18,6 +19,14 @@ export default function ResellerLayout({ children }: { children: React.ReactNode
   const session = getResellerSession();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [liveBalance, setLiveBalance] = useState(session?.balance ?? 0);
+
+  useEffect(() => {
+    if (!session?.reseller_id) return;
+    supabase.from('sc_resellers').select('balance').eq('id', session.reseller_id).maybeSingle().then(({ data }) => {
+      if (data?.balance !== undefined) { setLiveBalance(data.balance); updateResellerBalance(data.balance); }
+    });
+  }, [session?.reseller_id]);
 
   const handleLogout = () => { resellerLogout(); navigate('/reseller/login'); };
 
@@ -37,7 +46,7 @@ export default function ResellerLayout({ children }: { children: React.ReactNode
         </div>
         <div className="mt-3 bg-primary/10 rounded-xl p-3">
           <p className="text-xs text-muted-foreground">Saldo Aktif</p>
-          <p className="text-xl font-bold text-primary">Rp {(session?.balance ?? 0).toLocaleString('id-ID')}</p>
+          <p className="text-xl font-bold text-primary">Rp {liveBalance.toLocaleString('id-ID')}</p>
         </div>
       </div>
 
@@ -73,7 +82,7 @@ export default function ResellerLayout({ children }: { children: React.ReactNode
         </button>
         <p className="font-bold text-foreground text-sm">Dashboard Reseller</p>
         <div className="text-right">
-          <p className="text-xs text-primary font-bold">Rp {(session?.balance ?? 0).toLocaleString('id-ID')}</p>
+          <p className="text-xs text-primary font-bold">Rp {liveBalance.toLocaleString('id-ID')}</p>
         </div>
       </header>
 

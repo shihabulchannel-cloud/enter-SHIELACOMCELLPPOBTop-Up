@@ -1,26 +1,35 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Wallet, ShoppingCart, ArrowDownToLine, TrendingUp, Package, ArrowLeftRight } from 'lucide-react';
-import { getResellerSession } from '@/lib/reseller-auth';
+import { getResellerSession, updateResellerBalance } from '@/lib/reseller-auth';
 import { supabase } from '@/integrations/supabase/client';
 import ResellerLayout from './Layout';
 
 export default function ResellerDashboard() {
   const session = getResellerSession();
+  const [balance, setBalance] = useState(session?.balance ?? 0);
   const [stats, setStats] = useState({ orders: 0, success: 0, failed: 0, totalDeposit: 0 });
   const [recentOrders, setRecentOrders] = useState<Record<string, unknown>[]>([]);
 
   useEffect(() => {
     if (!session) return;
     const load = async () => {
-      const { data: orders } = await supabase.from('sc_reseller_orders').select('*').eq('reseller_id', session.reseller_id).order('created_at', { ascending: false }).limit(5);
-      const { data: allOrders } = await supabase.from('sc_reseller_orders').select('order_status').eq('reseller_id', session.reseller_id);
-      const { data: deposits } = await supabase.from('sc_deposits').select('amount').eq('reseller_id', session.reseller_id).eq('status', 'approved');
+      const [{ data: orders }, { data: allOrders }, { data: deposits }, { data: reseller }] = await Promise.all([
+        supabase.from('sc_reseller_orders').select('*').eq('reseller_id', session.reseller_id).order('created_at', { ascending: false }).limit(5),
+        supabase.from('sc_reseller_orders').select('order_status').eq('reseller_id', session.reseller_id),
+        supabase.from('sc_deposits').select('amount').eq('reseller_id', session.reseller_id).eq('status', 'approved'),
+        supabase.from('sc_resellers').select('balance').eq('id', session.reseller_id).maybeSingle(),
+      ]);
       setRecentOrders(orders || []);
       const totalDeposit = (deposits || []).reduce((sum: number, d: Record<string, unknown>) => sum + (d.amount as number), 0);
       const success = (allOrders || []).filter((o: Record<string, unknown>) => o.order_status === 'success').length;
       const failed = (allOrders || []).filter((o: Record<string, unknown>) => o.order_status === 'failed').length;
       setStats({ orders: (allOrders || []).length, success, failed, totalDeposit });
+      // Sync fresh balance from DB into session & local state
+      if (reseller && reseller.balance !== undefined) {
+        setBalance(reseller.balance);
+        updateResellerBalance(reseller.balance);
+      }
     };
     load();
   }, [session?.reseller_id]);
@@ -37,7 +46,7 @@ export default function ResellerDashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Saldo Aktif', value: `Rp ${(session?.balance ?? 0).toLocaleString('id-ID')}`, icon: Wallet, color: 'text-primary bg-primary/10', link: '/reseller/deposit' },
+          { label: 'Saldo Aktif', value: `Rp ${balance.toLocaleString('id-ID')}`, icon: Wallet, color: 'text-primary bg-primary/10', link: '/reseller/deposit' },
           { label: 'Total Deposit', value: `Rp ${stats.totalDeposit.toLocaleString('id-ID')}`, icon: ArrowDownToLine, color: 'text-blue-500 bg-blue-500/10', link: '/reseller/deposit' },
           { label: 'Transaksi Berhasil', value: stats.success.toString(), icon: TrendingUp, color: 'text-green-600 bg-green-500/10', link: '/reseller/history' },
           { label: 'Total Order', value: stats.orders.toString(), icon: ShoppingCart, color: 'text-purple-500 bg-purple-500/10', link: '/reseller/history' },
