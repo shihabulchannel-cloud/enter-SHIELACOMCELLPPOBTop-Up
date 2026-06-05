@@ -1,0 +1,27 @@
+
+-- Admin accounts table
+CREATE TABLE IF NOT EXISTS sc_admin_accounts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  username text UNIQUE NOT NULL,
+  password_hash text NOT NULL,
+  display_name text DEFAULT 'Admin',
+  email text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  last_login timestamptz,
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sc_admin_accounts ENABLE ROW LEVEL SECURITY;
+
+-- No public access — only accessible via service role (edge functions)
+
+-- Seed default admin account
+-- Password: Admin@12345 (SHA-256 hash)
+INSERT INTO sc_admin_accounts (username, password_hash, display_name, email)
+VALUES (
+  'admin',
+  '6f2cb9dd8f4b65e24e1c3f3fa5bc57982349237f11abceacd45bbcb74d621c25',
+  'Administrator',
+  'admin@shielacomcell.com'
+)
+ON CONFLICT (username) DO NOTHING;

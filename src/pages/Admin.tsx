@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Zap, Lock, User, LogIn } from 'lucide-react';
+import { Eye, EyeOff, Zap, Lock, User, LogIn, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { adminLogin } from '@/lib/admin-auth';
@@ -14,22 +14,22 @@ export default function Admin() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username || !password) {
       setError('Username dan password wajib diisi');
       return;
     }
     setLoading(true);
     setError('');
-    setTimeout(() => {
-      const ok = adminLogin(username, password);
-      if (ok) {
-        navigate('/admin/dashboard');
-      } else {
-        setError('Username atau password salah');
-        setLoading(false);
-      }
-    }, 800);
+
+    const result = await adminLogin(username, password);
+
+    if (result.success) {
+      navigate('/admin/dashboard');
+    } else {
+      setError(result.error || 'Username atau password salah');
+      setLoading(false);
+    }
   };
 
   return (
@@ -41,7 +41,6 @@ export default function Admin() {
       </div>
 
       <div className="relative w-full max-w-md">
-        {/* Card */}
         <div className="glass-dark border border-white/10 rounded-3xl p-8 shadow-glass">
           {/* Logo */}
           <div className="text-center mb-8">
@@ -63,6 +62,7 @@ export default function Admin() {
                   onChange={e => setUsername(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleLogin()}
                   placeholder="Masukkan username"
+                  autoComplete="username"
                   className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-primary h-12 rounded-xl"
                 />
               </div>
@@ -78,6 +78,7 @@ export default function Admin() {
                   onChange={e => setPassword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleLogin()}
                   placeholder="Masukkan password"
+                  autoComplete="current-password"
                   className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder:text-white/30 focus:border-primary h-12 rounded-xl"
                 />
                 <button
@@ -91,7 +92,8 @@ export default function Admin() {
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {error}
               </div>
             )}

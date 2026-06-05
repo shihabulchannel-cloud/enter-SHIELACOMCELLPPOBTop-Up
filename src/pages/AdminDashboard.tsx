@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Globe, Image, Package, Tag, Zap, CreditCard, TrendingUp, Users,
-  FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield, Loader2
+  FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield, Loader2,
+  UserCog, KeyRound, CheckCircle2, AlertCircle
 } from 'lucide-react';
-import { isAdminLoggedIn, adminLogout } from '@/lib/admin-auth';
+import { isAdminLoggedIn, adminLogout, getAdminSession, changeAdminPassword } from '@/lib/admin-auth';
 import { notificationStore, logAction, depositStore, registrationStore } from '@/lib/store';
 import AdminOverview from '@/components/admin/AdminOverview';
 import WebsiteManagement from '@/components/admin/WebsiteManagement';
@@ -19,13 +20,15 @@ import ContentPanel from '@/components/admin/ContentPanel';
 import ReportsPanel from '@/components/admin/ReportsPanel';
 import SystemPanel from '@/components/admin/SystemPanel';
 import { supabase } from '@/integrations/supabase/client';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 // ============================================================
 // NAV CONFIG
 // ============================================================
 type SectionKey =
-  | 'overview'
+  | 'overview' | 'profile'
   | 'website' | 'banners'
   | 'products' | 'categories'
   | 'provider' | 'payment' | 'markup'
@@ -52,6 +55,7 @@ function buildNav(unreadNotifs: number, pendingDeposits: number, pendingRegs: nu
       group: 'Utama',
       items: [
         { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+        { key: 'profile', label: 'Profil & Keamanan', icon: UserCog },
       ],
     },
     {
@@ -192,11 +196,116 @@ function TransactionsTable() {
 }
 
 // ============================================================
+// ADMIN PROFILE / CHANGE PASSWORD
+// ============================================================
+function AdminProfile() {
+  const session = getAdminSession();
+  const [oldPass, setOldPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const handleChange = async () => {
+    if (!oldPass || !newPass || !confirmPass) {
+      setResult({ ok: false, msg: 'Semua field wajib diisi' }); return;
+    }
+    if (newPass !== confirmPass) {
+      setResult({ ok: false, msg: 'Password baru tidak cocok' }); return;
+    }
+    if (newPass.length < 8) {
+      setResult({ ok: false, msg: 'Password baru minimal 8 karakter' }); return;
+    }
+    if (!session?.admin_id) {
+      setResult({ ok: false, msg: 'Sesi tidak valid, harap login ulang' }); return;
+    }
+    setLoading(true);
+    setResult(null);
+    const res = await changeAdminPassword(session.admin_id, oldPass, newPass);
+    setLoading(false);
+    if (res.success) {
+      setResult({ ok: true, msg: 'Password berhasil diubah!' });
+      setOldPass(''); setNewPass(''); setConfirmPass('');
+    } else {
+      setResult({ ok: false, msg: res.error || 'Gagal mengubah password' });
+    }
+  };
+
+  return (
+    <div className="max-w-xl space-y-5">
+      <div>
+        <h2 className="text-xl font-bold text-foreground">Profil & Keamanan</h2>
+        <p className="text-muted-foreground text-sm">Kelola akun admin Anda</p>
+      </div>
+
+      {/* Account Info */}
+      <div className="bg-card border border-border rounded-2xl p-5">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Shield className="w-7 h-7 text-primary" />
+          </div>
+          <div>
+            <p className="font-bold text-foreground text-lg">{session?.display_name || 'Admin'}</p>
+            <p className="text-muted-foreground text-sm">@{session?.username || 'admin'}</p>
+            {session?.email && <p className="text-muted-foreground text-xs">{session.email}</p>}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-muted rounded-xl p-3">
+            <p className="text-xs text-muted-foreground">Username</p>
+            <p className="font-semibold text-foreground">{session?.username || '—'}</p>
+          </div>
+          <div className="bg-muted rounded-xl p-3">
+            <p className="text-xs text-muted-foreground">Role</p>
+            <p className="font-semibold text-primary">Super Admin</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="bg-card border border-border rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound className="w-4 h-4 text-primary" />
+          <h3 className="font-bold text-foreground">Ganti Password</h3>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium text-foreground block mb-1.5">Password Lama</label>
+            <Input type="password" value={oldPass} onChange={e => setOldPass(e.target.value)} placeholder="Masukkan password lama" className="rounded-xl" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground block mb-1.5">Password Baru</label>
+            <Input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Minimal 8 karakter" className="rounded-xl" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground block mb-1.5">Konfirmasi Password Baru</label>
+            <Input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Ulangi password baru" className="rounded-xl" onKeyDown={e => e.key === 'Enter' && handleChange()} />
+          </div>
+
+          {result && (
+            <div className={cn('flex items-center gap-2 p-3 rounded-xl text-sm', result.ok ? 'bg-green-500/10 text-green-700' : 'bg-red-500/10 text-red-600')}>
+              {result.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+              {result.msg}
+            </div>
+          )}
+
+          <Button onClick={handleChange} disabled={loading} className="bg-primary text-primary-foreground btn-glow rounded-xl gap-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            {loading ? 'Menyimpan...' : 'Simpan Password Baru'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // CONTENT ROUTER
 // ============================================================
 function SectionContent({ section, navigate: nav }: { section: SectionKey; navigate: (s: SectionKey) => void }) {
   switch (section) {
     case 'overview': return <AdminOverview onNavigate={(s) => nav(s as SectionKey)} />;
+    case 'profile': return <AdminProfile />;
     case 'website': return <WebsiteManagement defaultSection="general" />;
     case 'banners': return <BannerManager />;
     case 'products': return <ProductManager />;
@@ -315,6 +424,20 @@ export default function AdminDashboard() {
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-border space-y-1">
+        {/* Admin info */}
+        <button
+          onClick={() => handleNavigate('profile')}
+          className={cn('w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-left mb-1', section === 'profile' ? 'bg-primary/10' : 'hover:bg-muted')}
+        >
+          <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
+            <Shield className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-foreground truncate">{getAdminSession()?.display_name || 'Admin'}</p>
+            <p className="text-xs text-muted-foreground truncate">@{getAdminSession()?.username || 'admin'}</p>
+          </div>
+          <UserCog className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        </button>
         <button onClick={() => window.open('/', '_blank')} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all text-left">
           <Globe className="w-4 h-4 flex-shrink-0" />
           <span>Lihat Website</span>
