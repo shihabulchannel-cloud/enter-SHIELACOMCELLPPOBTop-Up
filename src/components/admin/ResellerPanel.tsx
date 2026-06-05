@@ -1,206 +1,181 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Check, X, User, Wallet, ChevronDown, ChevronUp, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Plus, Check, X, User, Wallet, Pencil, Ban, CheckCircle2, XCircle, Clock, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import {
-  resellerStore, registrationStore, depositStore, walletMutationStore,
-  type Reseller, type ResellerRegistration, type Deposit, type WalletMutation, logAction
-} from '@/lib/store';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-type Tab = 'resellers' | 'registrations' | 'deposits' | 'mutations';
+type Tab = 'resellers' | 'deposits' | 'tickets';
 
-// ===== RESELLER TAB =====
-function ResellerTab() {
+interface Reseller { id: string; name: string; username: string; email: string; whatsapp: string; balance: number; markup: number; status: string; created_at: string; }
+interface Deposit { id: string; reseller_name: string; amount: number; bank_target: string; status: string; reject_reason: string; created_at: string; proof_image?: string; }
+interface Ticket { id: string; reseller_name: string; subject: string; message: string; status: string; admin_reply: string; created_at: string; }
+
+// ===== RESELLERS TAB =====
+function ResellersTab() {
   const [resellers, setResellers] = useState<Reseller[]>([]);
+  const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [balanceModal, setBalanceModal] = useState<Reseller | null>(null);
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceNote, setBalanceNote] = useState('');
   const [balanceType, setBalanceType] = useState<'add' | 'deduct'>('add');
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [msg, setMsg] = useState('');
 
-  useEffect(() => { setResellers(resellerStore.get()); }, []);
-  const refresh = () => setResellers(resellerStore.get());
+  const [newForm, setNewForm] = useState({ name: '', username: '', password: '', email: '', whatsapp: '', markup: '0' });
 
-  const emptyForm = (): Omit<Reseller, 'id'> => ({
-    name: '', email: '', whatsapp: '', username: '', password: '',
-    balance: 0, status: 'active', createdAt: new Date().toLocaleDateString(),
-  });
-  const [form, setForm] = useState(emptyForm());
-  const f = (k: keyof typeof form) => (v: string | number) => setForm(p => ({ ...p, [k]: v }));
-
-  const handleAddReseller = () => {
-    if (!form.name || !form.username) return;
-    resellerStore.add(form);
-    refresh(); setAdding(false); setForm(emptyForm());
+  const loadResellers = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('sc_resellers').select('*').order('created_at', { ascending: false });
+    setResellers(data || []);
+    setLoading(false);
   };
 
-  const handleAdjustBalance = () => {
-    if (!balanceModal) return;
-    const amt = parseInt(balanceAmount) || 0;
-    if (amt <= 0) return;
-    depositStore.addManual(balanceModal.id, balanceType === 'add' ? amt : -amt, balanceNote || (balanceType === 'add' ? 'Deposit manual' : 'Debit manual'));
-    refresh();
-    setBalanceModal(null); setBalanceAmount(''); setBalanceNote('');
+  useEffect(() => { loadResellers(); }, []);
+
+  const handleAddReseller = async () => {
+    if (!newForm.name || !newForm.username || !newForm.password) { setMsg('Nama, username, dan password wajib diisi'); return; }
+    const { data, error } = await supabase.functions.invoke('reseller-auth', { body: { action: 'register', name: newForm.name, username: newForm.username, password: newForm.password, email: newForm.email, whatsapp: newForm.whatsapp } });
+    if (error || data?.error) { setMsg(data?.error || error?.message || 'Gagal'); return; }
+    // Set markup
+    if (+newForm.markup > 0) {
+      const { data: created } = await supabase.from('sc_resellers').select('id').eq('username', newForm.username).maybeSingle();
+      if (created) await supabase.from('sc_resellers').update({ markup: +newForm.markup }).eq('id', created.id);
+    }
+    setMsg('Reseller berhasil ditambahkan');
+    setAdding(false);
+    setNewForm({ name: '', username: '', password: '', email: '', whatsapp: '', markup: '0' });
+    loadResellers();
   };
 
-  const ResellerForm = ({ initial, onSave, onCancel }: { initial?: Partial<Reseller>; onSave: () => void; onCancel: () => void }) => {
-    const [lForm, setLForm] = useState({ ...emptyForm(), ...initial });
-    const lf = (k: keyof typeof lForm) => (v: string | number) => setLForm(p => ({ ...p, [k]: v }));
-    return (
-      <div className="bg-card border border-border rounded-2xl p-4 space-y-3 animate-scale-in">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Nama *</label><Input value={lForm.name} onChange={e => lf('name')(e.target.value)} className="rounded-xl h-9" /></div>
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Username *</label><Input value={lForm.username} onChange={e => lf('username')(e.target.value)} className="rounded-xl h-9" /></div>
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Password</label><Input type="password" value={lForm.password} onChange={e => lf('password')(e.target.value)} placeholder="Kosong = tidak diubah" className="rounded-xl h-9" /></div>
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">WhatsApp</label><Input value={lForm.whatsapp} onChange={e => lf('whatsapp')(e.target.value)} className="rounded-xl h-9" /></div>
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label><Input type="email" value={lForm.email} onChange={e => lf('email')(e.target.value)} className="rounded-xl h-9" /></div>
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>
-            <select value={lForm.status} onChange={e => lf('status')(e.target.value)} className="w-full h-9 rounded-xl border border-input bg-background px-3 text-sm">
-              <option value="active">Aktif</option><option value="suspended">Suspend</option>
-            </select>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => { if (lForm.name && lForm.username) { if (initial?.id) resellerStore.update(initial.id, lForm); else resellerStore.add(lForm); refresh(); onSave(); } }} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow">
-            <Check className="w-4 h-4" /> Simpan
-          </Button>
-          <Button onClick={onCancel} size="sm" variant="outline" className="rounded-xl gap-1"><X className="w-4 h-4" /> Batal</Button>
-        </div>
-      </div>
-    );
+  const handleSuspend = async (r: Reseller) => {
+    const newStatus = r.status === 'active' ? 'suspended' : 'active';
+    await supabase.from('sc_resellers').update({ status: newStatus }).eq('id', r.id);
+    loadResellers();
+  };
+
+  const handleMarkupUpdate = async (r: Reseller, markup: string) => {
+    await supabase.from('sc_resellers').update({ markup: +markup }).eq('id', r.id);
+    setEditId(null);
+    loadResellers();
+  };
+
+  const handleAdjustBalance = async () => {
+    if (!balanceModal || !balanceAmount) return;
+    setBalanceLoading(true);
+    const { data, error } = await supabase.functions.invoke('reseller-deposit', { body: { action: 'manual_adjust', reseller_id: balanceModal.id, amount: +balanceAmount, type: balanceType, reason: balanceNote } });
+    if (error || data?.error) setMsg(data?.error || error?.message || 'Gagal');
+    else { setMsg(`Saldo berhasil ${balanceType === 'add' ? 'ditambah' : 'dikurangi'}`); setBalanceModal(null); setBalanceAmount(''); setBalanceNote(''); loadResellers(); }
+    setBalanceLoading(false);
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{resellers.filter(r => r.status === 'active').length} aktif dari {resellers.length} reseller</p>
-        <Button onClick={() => { setAdding(!adding); setEditing(null); }} size="sm" className="bg-primary text-primary-foreground btn-glow rounded-xl gap-2">
-          <Plus className="w-4 h-4" /> Tambah Reseller
+        <Button onClick={() => setAdding(!adding)} size="sm" className="bg-primary text-primary-foreground btn-glow rounded-xl gap-2">
+          {adding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />} {adding ? 'Batal' : 'Tambah Reseller'}
         </Button>
       </div>
 
-      {adding && <ResellerForm onSave={() => { setAdding(false); refresh(); }} onCancel={() => setAdding(false)} />}
+      {msg && <div className="bg-primary/10 text-primary text-sm px-4 py-2 rounded-xl">{msg}</div>}
 
-      {/* Balance Modal */}
-      {balanceModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setBalanceModal(null)}>
-          <div className="bg-card border border-border rounded-2xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-foreground mb-1">Kelola Saldo</h3>
-            <p className="text-muted-foreground text-sm mb-4">{balanceModal.name} — Saldo: Rp {balanceModal.balance.toLocaleString('id-ID')}</p>
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <button onClick={() => setBalanceType('add')} className={cn('flex-1 py-2 rounded-xl border text-sm font-medium transition-all', balanceType === 'add' ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:bg-muted')}>Tambah Saldo</button>
-                <button onClick={() => setBalanceType('deduct')} className={cn('flex-1 py-2 rounded-xl border text-sm font-medium transition-all', balanceType === 'deduct' ? 'bg-red-500 text-white border-red-500' : 'border-border text-muted-foreground hover:bg-muted')}>Kurangi Saldo</button>
+      {adding && (
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-3 animate-scale-in">
+          <h3 className="font-semibold text-foreground text-sm">Tambah Reseller Baru</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { key: 'name', label: 'Nama *', placeholder: 'Nama lengkap' },
+              { key: 'username', label: 'Username *', placeholder: 'username' },
+              { key: 'password', label: 'Password *', placeholder: 'Min. 6 karakter', type: 'password' },
+              { key: 'whatsapp', label: 'WhatsApp', placeholder: '08xxxxxxxxxx' },
+              { key: 'email', label: 'Email', placeholder: 'email@contoh.com' },
+              { key: 'markup', label: 'Markup (Rp)', placeholder: '0', type: 'number' },
+            ].map(({ key, label, placeholder, type }) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
+                <Input type={type || 'text'} value={newForm[key as keyof typeof newForm]} onChange={e => setNewForm(p => ({ ...p, [key]: e.target.value }))} placeholder={placeholder} className="rounded-xl h-9" />
               </div>
-              <Input type="number" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} placeholder="Jumlah (Rp)" className="rounded-xl" />
-              <Input value={balanceNote} onChange={e => setBalanceNote(e.target.value)} placeholder="Keterangan" className="rounded-xl" />
-              <div className="flex gap-2">
-                <Button onClick={handleAdjustBalance} className="flex-1 bg-primary text-primary-foreground btn-glow rounded-xl">Konfirmasi</Button>
-                <Button onClick={() => setBalanceModal(null)} variant="outline" className="rounded-xl">Batal</Button>
-              </div>
-            </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleAddReseller} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow"><Check className="w-4 h-4" /> Simpan</Button>
+            <Button onClick={() => setAdding(false)} size="sm" variant="outline" className="rounded-xl"><X className="w-4 h-4" /> Batal</Button>
           </div>
         </div>
       )}
 
-      {resellers.map(r => (
-        <div key={r.id}>
-          {editing === r.id ? (
-            <ResellerForm initial={r} onSave={() => { setEditing(null); refresh(); }} onCancel={() => setEditing(null)} />
-          ) : (
-            <div className={cn('bg-card border rounded-2xl p-4 group transition-all', r.status === 'active' ? 'border-border' : 'border-red-500/30 bg-red-500/5')}>
-              <div className="flex items-center gap-3">
+      {loading ? <div className="text-center py-8"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" /></div> : (
+        <div className="space-y-2">
+          {resellers.map(r => (
+            <div key={r.id} className={cn('bg-card border rounded-2xl p-4 transition-all', r.status === 'suspended' ? 'border-red-500/30 opacity-70' : 'border-border')}>
+              <div className="flex flex-wrap items-start gap-3">
                 <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-primary" />
+                  <User className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-foreground text-sm">{r.name}</p>
-                    <Badge className={cn('text-xs border', r.status === 'active' ? 'bg-green-500/10 text-green-600 border-green-500/30' : 'bg-red-500/10 text-red-500 border-red-500/30')}>
-                      {r.status === 'active' ? 'Aktif' : 'Suspend'}
-                    </Badge>
+                    <p className="font-semibold text-foreground">{r.name}</p>
+                    <span className="text-xs text-muted-foreground">@{r.username}</span>
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', r.status === 'active' ? 'text-green-600 bg-green-500/10' : 'text-red-500 bg-red-500/10')}>{r.status === 'active' ? 'Aktif' : 'Suspend'}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">@{r.username} • {r.whatsapp}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                    <p className="text-xs text-muted-foreground">Saldo: <span className="font-semibold text-primary">Rp {r.balance.toLocaleString('id-ID')}</span></p>
+                    <p className="text-xs text-muted-foreground">Markup: Rp {r.markup.toLocaleString('id-ID')}</p>
+                    {r.whatsapp && <p className="text-xs text-muted-foreground">WA: {r.whatsapp}</p>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-sm font-bold text-primary hidden sm:block">Rp {r.balance.toLocaleString('id-ID')}</span>
-                  <button onClick={() => { setBalanceModal(r); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors" title="Kelola Saldo">
-                    <Wallet className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => { setEditing(r.id); setAdding(false); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => { resellerStore.update(r.id, { status: r.status === 'active' ? 'suspended' : 'active' }); logAction(r.status === 'active' ? 'RESELLER_SUSPEND' : 'RESELLER_ACTIVATE', `${r.status === 'active' ? 'Suspend' : 'Aktifkan'} reseller: ${r.name}`); refresh(); }} className="p-1.5 rounded-lg hover:bg-yellow-500/10 text-muted-foreground hover:text-yellow-600 transition-colors">
-                    {r.status === 'active' ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                  </button>
-                  <button onClick={() => { if (confirm(`Hapus reseller ${r.name}?`)) { resellerStore.remove(r.id); refresh(); } }} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-destructive transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                <div className="flex gap-1.5 flex-wrap">
+                  <Button size="sm" variant="outline" onClick={() => { setBalanceModal(r); setBalanceAmount(''); setBalanceNote(''); setBalanceType('add'); }} className="rounded-xl gap-1 h-8 text-xs"><Wallet className="w-3 h-3" /> Saldo</Button>
+                  {editId === r.id ? (
+                    <EditMarkup reseller={r} onSave={handleMarkupUpdate} onCancel={() => setEditId(null)} />
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setEditId(r.id)} className="rounded-xl gap-1 h-8 text-xs"><Pencil className="w-3 h-3" /> Markup</Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => handleSuspend(r)} className={cn('rounded-xl gap-1 h-8 text-xs', r.status === 'active' ? 'text-red-500 hover:bg-red-500/10' : 'text-green-600 hover:bg-green-500/10')}>
+                    {r.status === 'active' ? <><Ban className="w-3 h-3" /> Suspend</> : <><CheckCircle2 className="w-3 h-3" /> Aktifkan</>}
+                  </Button>
                 </div>
               </div>
-              <div className="mt-2 text-sm font-bold text-primary sm:hidden">Saldo: Rp {r.balance.toLocaleString('id-ID')}</div>
             </div>
-          )}
+          ))}
         </div>
-      ))}
+      )}
+
+      {/* Balance Modal */}
+      {balanceModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-bold text-foreground">Kelola Saldo: {balanceModal.name}</h3>
+            <p className="text-sm text-muted-foreground">Saldo saat ini: <span className="font-bold text-primary">Rp {balanceModal.balance.toLocaleString('id-ID')}</span></p>
+            <div className="flex gap-2">
+              <button onClick={() => setBalanceType('add')} className={cn('flex-1 py-2 rounded-xl border text-sm font-medium', balanceType === 'add' ? 'bg-green-500 text-white border-green-500' : 'border-border hover:bg-muted')}>Tambah</button>
+              <button onClick={() => setBalanceType('deduct')} className={cn('flex-1 py-2 rounded-xl border text-sm font-medium', balanceType === 'deduct' ? 'bg-red-500 text-white border-red-500' : 'border-border hover:bg-muted')}>Kurangi</button>
+            </div>
+            <Input type="number" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} placeholder="Nominal (Rp)" className="rounded-xl" />
+            <Input value={balanceNote} onChange={e => setBalanceNote(e.target.value)} placeholder="Catatan (opsional)" className="rounded-xl" />
+            <div className="flex gap-2">
+              <Button onClick={handleAdjustBalance} disabled={balanceLoading} className="flex-1 bg-primary text-primary-foreground rounded-xl btn-glow">
+                {balanceLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Konfirmasi'}
+              </Button>
+              <Button variant="outline" onClick={() => setBalanceModal(null)} className="rounded-xl">Batal</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ===== REGISTRATIONS TAB =====
-function RegistrationsTab() {
-  const [regs, setRegs] = useState<ResellerRegistration[]>([]);
-  const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { setRegs(registrationStore.get()); }, []);
-  const refresh = () => setRegs(registrationStore.get());
-
-  const STATUS_CFG = {
-    pending: { label: 'Pending', cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
-    approved: { label: 'Disetujui', cls: 'bg-green-500/10 text-green-600 border-green-500/30' },
-    rejected: { label: 'Ditolak', cls: 'bg-red-500/10 text-red-500 border-red-500/30' },
-  };
-
+function EditMarkup({ reseller, onSave, onCancel }: { reseller: Reseller; onSave: (r: Reseller, m: string) => void; onCancel: () => void }) {
+  const [val, setVal] = useState(String(reseller.markup));
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{regs.filter(r => r.status === 'pending').length} pendaftaran pending</p>
-      {regs.map(reg => (
-        <div key={reg.id} className="bg-card border border-border rounded-2xl overflow-hidden">
-          <button onClick={() => setOpen(open === reg.id ? null : reg.id)} className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left">
-            <User className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-foreground text-sm">{reg.name}</p>
-                <Badge className={cn('text-xs border', STATUS_CFG[reg.status].cls)}>{STATUS_CFG[reg.status].label}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">{reg.whatsapp} • {reg.createdAt.split('T')[0]}</p>
-            </div>
-            {open === reg.id ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-          </button>
-          {open === reg.id && (
-            <div className="px-4 pb-4 border-t border-border pt-3 space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-muted-foreground">Email: </span><span className="text-foreground">{reg.email}</span></div>
-                <div><span className="text-muted-foreground">WA: </span><span className="text-foreground">{reg.whatsapp}</span></div>
-              </div>
-              {reg.message && <p className="text-sm text-foreground bg-muted rounded-xl px-3 py-2">{reg.message}</p>}
-              {reg.status === 'pending' && (
-                <div className="flex gap-2">
-                  <Button onClick={() => { registrationStore.update(reg.id, { status: 'approved' }); logAction('REG_APPROVE', `Setujui pendaftaran: ${reg.name}`); refresh(); }} size="sm" className="bg-green-600 hover:bg-green-700 text-white rounded-xl gap-2">
-                    <CheckCircle2 className="w-4 h-4" /> Setujui
-                  </Button>
-                  <Button onClick={() => { registrationStore.update(reg.id, { status: 'rejected' }); logAction('REG_REJECT', `Tolak pendaftaran: ${reg.name}`); refresh(); }} size="sm" variant="outline" className="rounded-xl gap-2 text-red-500 border-red-500/30 hover:bg-red-500/10">
-                    <XCircle className="w-4 h-4" /> Tolak
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-      {regs.length === 0 && <p className="text-center py-8 text-muted-foreground">Belum ada pendaftaran reseller</p>}
+    <div className="flex gap-1 items-center">
+      <Input type="number" value={val} onChange={e => setVal(e.target.value)} className="rounded-xl h-8 w-24 text-xs" placeholder="Markup" />
+      <Button size="sm" onClick={() => onSave(reseller, val)} className="rounded-xl h-8 px-2 bg-primary text-primary-foreground"><Check className="w-3 h-3" /></Button>
+      <Button size="sm" variant="outline" onClick={onCancel} className="rounded-xl h-8 px-2"><X className="w-3 h-3" /></Button>
     </div>
   );
 }
@@ -208,126 +183,223 @@ function RegistrationsTab() {
 // ===== DEPOSITS TAB =====
 function DepositsTab() {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
-  useEffect(() => { setDeposits(depositStore.get()); }, []);
-  const refresh = () => setDeposits(depositStore.get());
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('pending');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [rejectModal, setRejectModal] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [proofModal, setProofModal] = useState<string | null>(null);
 
-  const STATUS_CFG = {
-    pending: { label: 'Pending', cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30', Icon: Clock },
-    approved: { label: 'Disetujui', cls: 'bg-green-500/10 text-green-600 border-green-500/30', Icon: CheckCircle2 },
-    rejected: { label: 'Ditolak', cls: 'bg-red-500/10 text-red-500 border-red-500/30', Icon: XCircle },
+  const loadDeposits = async () => {
+    setLoading(true);
+    let q = supabase.from('sc_deposits').select('*').order('created_at', { ascending: false });
+    if (filter !== 'all') q = q.eq('status', filter);
+    const { data } = await q;
+    setDeposits(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { loadDeposits(); }, [filter]);
+
+  const handleApprove = async (id: string) => {
+    setActionLoading(id);
+    await supabase.functions.invoke('reseller-deposit', { body: { action: 'approve', deposit_id: id } });
+    setActionLoading(null);
+    loadDeposits();
+  };
+
+  const handleReject = async () => {
+    if (!rejectModal) return;
+    setActionLoading(rejectModal);
+    await supabase.functions.invoke('reseller-deposit', { body: { action: 'reject', deposit_id: rejectModal, reject_reason: rejectReason || 'Ditolak admin' } });
+    setActionLoading(null);
+    setRejectModal(null);
+    setRejectReason('');
+    loadDeposits();
+  };
+
+  const STATUS: Record<string, { label: string; color: string; icon: typeof Clock }> = {
+    pending: { label: 'Menunggu', color: 'text-yellow-600 bg-yellow-500/10', icon: Clock },
+    approved: { label: 'Disetujui', color: 'text-green-600 bg-green-500/10', icon: CheckCircle2 },
+    rejected: { label: 'Ditolak', color: 'text-red-500 bg-red-500/10', icon: XCircle },
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{deposits.filter(d => d.status === 'pending').length} deposit menunggu konfirmasi</p>
-      {deposits.map(dep => {
-        const cfg = STATUS_CFG[dep.status];
-        const Icon = cfg.Icon;
-        return (
-          <div key={dep.id} className="bg-card border border-border rounded-2xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-foreground text-sm">{dep.resellerName}</p>
-                  <Badge className={cn('text-xs border flex items-center gap-1', cfg.cls)}>
-                    <Icon className="w-3 h-3" />{cfg.label}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{dep.method} • {dep.note}</p>
-                <p className="text-xs text-muted-foreground">{dep.createdAt}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="font-bold text-foreground text-sm">Rp {dep.amount.toLocaleString('id-ID')}</span>
-                {dep.status === 'pending' && (
-                  <div className="flex gap-1">
-                    <button onClick={() => { depositStore.approve(dep.id); refresh(); }} className="p-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-600 transition-colors" title="Setujui">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => { depositStore.reject(dep.id); refresh(); }} className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors" title="Tolak">
-                      <XCircle className="w-4 h-4" />
-                    </button>
+    <div className="space-y-4">
+      <div className="flex gap-2 flex-wrap">
+        {[['pending', 'Menunggu'], ['approved', 'Disetujui'], ['rejected', 'Ditolak'], ['all', 'Semua']].map(([v, l]) => (
+          <button key={v} onClick={() => setFilter(v)} className={cn('px-4 py-1.5 rounded-xl text-sm font-medium border transition-all', filter === v ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted')}>{l}</button>
+        ))}
+      </div>
+
+      {loading ? <div className="text-center py-8"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" /></div> : (
+        deposits.length === 0 ? <p className="text-muted-foreground text-sm text-center py-8">Tidak ada deposit</p> : (
+          <div className="space-y-3">
+            {deposits.map(d => {
+              const s = STATUS[d.status] || STATUS.pending;
+              return (
+                <div key={d.id} className="bg-card border border-border rounded-2xl p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-foreground">Rp {d.amount.toLocaleString('id-ID')}</p>
+                        <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1', s.color)}><s.icon className="w-3 h-3" />{s.label}</span>
+                      </div>
+                      <p className="text-sm text-foreground mt-0.5">{d.reseller_name}</p>
+                      <p className="text-xs text-muted-foreground">{d.bank_target}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      {d.reject_reason && <p className="text-xs text-red-500 mt-0.5">Alasan: {d.reject_reason}</p>}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {d.proof_image && (
+                        <Button size="sm" variant="outline" onClick={() => setProofModal(d.proof_image!)} className="rounded-xl gap-1 h-8 text-xs"><Eye className="w-3 h-3" /> Bukti</Button>
+                      )}
+                      {d.status === 'pending' && (
+                        <>
+                          <Button size="sm" onClick={() => handleApprove(d.id)} disabled={actionLoading === d.id} className="bg-green-600 text-white rounded-xl gap-1 h-8 text-xs hover:bg-green-700">
+                            {actionLoading === d.id ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><CheckCircle2 className="w-3 h-3" /> Setujui</>}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setRejectModal(d.id); setRejectReason(''); }} className="rounded-xl gap-1 h-8 text-xs text-red-500 hover:bg-red-500/10"><XCircle className="w-3 h-3" /> Tolak</Button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="font-bold text-foreground">Tolak Deposit</h3>
+            <Input value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Alasan penolakan (opsional)" className="rounded-xl" />
+            <div className="flex gap-2">
+              <Button onClick={handleReject} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl">Konfirmasi Tolak</Button>
+              <Button variant="outline" onClick={() => setRejectModal(null)} className="rounded-xl">Batal</Button>
             </div>
           </div>
-        );
-      })}
-      {deposits.length === 0 && <p className="text-center py-8 text-muted-foreground">Belum ada riwayat deposit</p>}
+        </div>
+      )}
+
+      {/* Proof image modal */}
+      {proofModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setProofModal(null)}>
+          <div className="max-w-lg w-full">
+            <img src={proofModal} alt="Bukti transfer" className="w-full rounded-2xl" />
+            <p className="text-white/70 text-center text-sm mt-2">Klik di luar untuk menutup</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ===== MUTATIONS TAB =====
-function MutationsTab() {
-  const [mutations, setMutations] = useState<WalletMutation[]>([]);
-  const [filterReseller, setFilterReseller] = useState('');
-  const resellers = resellerStore.get();
-  useEffect(() => { setMutations(walletMutationStore.get()); }, []);
+// ===== TICKETS TAB =====
+function TicketsTab() {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [replyId, setReplyId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
 
-  const filtered = filterReseller ? mutations.filter(m => m.resellerId === filterReseller) : mutations;
+  const loadTickets = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('sc_support_tickets').select('*').order('created_at', { ascending: false });
+    setTickets(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { loadTickets(); }, []);
 
-  const typeColors: Record<string, string> = {
-    deposit: 'text-green-600',
-    debit: 'text-red-500',
-    transaction: 'text-blue-600',
-    refund: 'text-orange-500',
+  const handleReply = async (id: string) => {
+    await supabase.from('sc_support_tickets').update({ status: 'replied', admin_reply: replyText, updated_at: new Date().toISOString() }).eq('id', id);
+    setReplyId(null);
+    setReplyText('');
+    loadTickets();
+  };
+
+  const handleClose = async (id: string) => {
+    await supabase.from('sc_support_tickets').update({ status: 'closed', updated_at: new Date().toISOString() }).eq('id', id);
+    loadTickets();
+  };
+
+  const STATUS: Record<string, { label: string; color: string }> = {
+    open: { label: 'Menunggu', color: 'text-yellow-600 bg-yellow-500/10' },
+    replied: { label: 'Dibalas', color: 'text-blue-500 bg-blue-500/10' },
+    closed: { label: 'Selesai', color: 'text-green-600 bg-green-500/10' },
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <select value={filterReseller} onChange={e => setFilterReseller(e.target.value)} className="h-9 rounded-xl border border-input bg-background px-3 text-sm flex-1">
-          <option value="">Semua Reseller</option>
-          {resellers.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-      </div>
-      {filtered.map(mut => (
-        <div key={mut.id} className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-foreground text-sm">{mut.resellerName}</p>
-            <p className="text-muted-foreground text-xs">{mut.description}</p>
-            <p className="text-muted-foreground text-xs">{mut.createdAt}</p>
+      {loading ? <div className="text-center py-8"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" /></div> : (
+        tickets.length === 0 ? <p className="text-muted-foreground text-sm text-center py-8">Tidak ada tiket</p> : (
+          <div className="space-y-3">
+            {tickets.map(t => {
+              const s = STATUS[t.status] || STATUS.open;
+              return (
+                <div key={t.id} className="bg-card border border-border rounded-2xl p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-foreground">{t.subject}</p>
+                      <p className="text-xs text-muted-foreground">{t.reseller_name} · {new Date(t.created_at).toLocaleDateString('id-ID')}</p>
+                    </div>
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', s.color)}>{s.label}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground bg-muted/40 rounded-xl p-3">{t.message}</p>
+                  {t.admin_reply && <div className="bg-primary/5 border border-primary/20 rounded-xl p-3"><p className="text-xs font-semibold text-primary mb-1">Balasan Anda:</p><p className="text-sm text-foreground">{t.admin_reply}</p></div>}
+                  {replyId === t.id ? (
+                    <div className="space-y-2">
+                      <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Tulis balasan..." rows={3} className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleReply(t.id)} className="bg-primary text-primary-foreground rounded-xl btn-glow">Kirim Balasan</Button>
+                        <Button size="sm" variant="outline" onClick={() => setReplyId(null)} className="rounded-xl">Batal</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => { setReplyId(t.id); setReplyText(t.admin_reply || ''); }} className="rounded-xl h-8 text-xs">Balas</Button>
+                      {t.status !== 'closed' && <Button size="sm" variant="outline" onClick={() => handleClose(t.id)} className="rounded-xl h-8 text-xs text-green-600">Tutup Tiket</Button>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <div className="text-right flex-shrink-0">
-            <p className={cn('font-bold text-sm', typeColors[mut.type])}>
-              {mut.amount > 0 ? '+' : ''}Rp {mut.amount.toLocaleString('id-ID')}
-            </p>
-            <p className="text-muted-foreground text-xs">→ Rp {mut.balanceAfter.toLocaleString('id-ID')}</p>
-          </div>
-        </div>
-      ))}
-      {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Belum ada mutasi wallet</p>}
+        )
+      )}
     </div>
   );
 }
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'resellers', label: 'Daftar Reseller' },
-  { id: 'registrations', label: 'Pendaftaran' },
-  { id: 'deposits', label: 'Deposit' },
-  { id: 'mutations', label: 'Mutasi Wallet' },
-];
+// ===== MAIN COMPONENT =====
+export default function ResellerPanel() {
+  const [tab, setTab] = useState<Tab>('resellers');
 
-export default function ResellerPanel({ defaultTab = 'resellers' }: { defaultTab?: Tab }) {
-  const [tab, setTab] = useState<Tab>(defaultTab);
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'resellers', label: 'Reseller' },
+    { key: 'deposits', label: 'Deposit' },
+    { key: 'tickets', label: 'Tiket Bantuan' },
+  ];
 
   return (
-    <div>
-      <div className="mb-2">
+    <div className="space-y-6">
+      <div>
         <h2 className="text-xl font-bold text-foreground">Manajemen Reseller</h2>
+        <p className="text-muted-foreground text-sm">Kelola akun reseller, deposit, dan tiket bantuan</p>
       </div>
-      <div className="flex gap-2 overflow-x-auto scrollbar-hidden pb-3 mb-6 border-b border-border">
+
+      <div className="flex gap-2 border-b border-border">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={cn('flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all', tab === t.id ? 'bg-primary text-primary-foreground shadow-green' : 'text-muted-foreground hover:text-foreground hover:bg-muted')}>
+          <button key={t.key} onClick={() => setTab(t.key)} className={cn('px-4 py-2.5 text-sm font-medium border-b-2 transition-all', tab === t.key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}>
             {t.label}
           </button>
         ))}
       </div>
-      {tab === 'resellers' && <ResellerTab />}
-      {tab === 'registrations' && <RegistrationsTab />}
+
+      {tab === 'resellers' && <ResellersTab />}
       {tab === 'deposits' && <DepositsTab />}
-      {tab === 'mutations' && <MutationsTab />}
+      {tab === 'tickets' && <TicketsTab />}
     </div>
   );
 }

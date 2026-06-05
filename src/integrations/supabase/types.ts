@@ -3142,6 +3142,82 @@ export type Database = {
         }
         Relationships: []
       }
+      sc_bank_accounts: {
+        Row: {
+          account_name: string
+          account_number: string
+          active: boolean | null
+          bank_name: string
+          created_at: string | null
+          id: string
+        }
+        Insert: {
+          account_name: string
+          account_number: string
+          active?: boolean | null
+          bank_name: string
+          created_at?: string | null
+          id?: string
+        }
+        Update: {
+          account_name?: string
+          account_number?: string
+          active?: boolean | null
+          bank_name?: string
+          created_at?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      sc_deposits: {
+        Row: {
+          amount: number
+          bank_target: string | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          proof_image: string | null
+          reject_reason: string | null
+          reseller_id: string | null
+          reseller_name: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          bank_target?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          proof_image?: string | null
+          reject_reason?: string | null
+          reseller_id?: string | null
+          reseller_name?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_target?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          proof_image?: string | null
+          reject_reason?: string | null
+          reseller_id?: string | null
+          reseller_name?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sc_deposits_reseller_id_fkey"
+            columns: ["reseller_id"]
+            referencedRelation: "sc_resellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sc_digiflazz_config: {
         Row: {
           active: boolean | null
@@ -3324,6 +3400,207 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      sc_reseller_orders: {
+        Row: {
+          created_at: string | null
+          digiflazz_ref: string | null
+          digiflazz_sn: string | null
+          id: string
+          invoice_id: string
+          markup: number
+          notes: string | null
+          order_status: string | null
+          product_name: string
+          product_price: number
+          product_sku: string
+          reseller_id: string | null
+          reseller_name: string
+          sell_price: number
+          target: string
+          target_detail: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          digiflazz_ref?: string | null
+          digiflazz_sn?: string | null
+          id?: string
+          invoice_id?: string
+          markup?: number
+          notes?: string | null
+          order_status?: string | null
+          product_name: string
+          product_price?: number
+          product_sku: string
+          reseller_id?: string | null
+          reseller_name?: string
+          sell_price?: number
+          target: string
+          target_detail?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          digiflazz_ref?: string | null
+          digiflazz_sn?: string | null
+          id?: string
+          invoice_id?: string
+          markup?: number
+          notes?: string | null
+          order_status?: string | null
+          product_name?: string
+          product_price?: number
+          product_sku?: string
+          reseller_id?: string | null
+          reseller_name?: string
+          sell_price?: number
+          target?: string
+          target_detail?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sc_reseller_orders_reseller_id_fkey"
+            columns: ["reseller_id"]
+            referencedRelation: "sc_resellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sc_resellers: {
+        Row: {
+          balance: number | null
+          created_at: string | null
+          email: string | null
+          id: string
+          last_login: string | null
+          markup: number | null
+          name: string
+          password_hash: string
+          status: string | null
+          updated_at: string | null
+          username: string
+          whatsapp: string | null
+        }
+        Insert: {
+          balance?: number | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          last_login?: string | null
+          markup?: number | null
+          name: string
+          password_hash: string
+          status?: string | null
+          updated_at?: string | null
+          username: string
+          whatsapp?: string | null
+        }
+        Update: {
+          balance?: number | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          last_login?: string | null
+          markup?: number | null
+          name?: string
+          password_hash?: string
+          status?: string | null
+          updated_at?: string | null
+          username?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      sc_support_tickets: {
+        Row: {
+          admin_reply: string | null
+          created_at: string | null
+          id: string
+          message: string
+          reseller_id: string | null
+          reseller_name: string
+          status: string | null
+          subject: string
+          updated_at: string | null
+        }
+        Insert: {
+          admin_reply?: string | null
+          created_at?: string | null
+          id?: string
+          message: string
+          reseller_id?: string | null
+          reseller_name?: string
+          status?: string | null
+          subject: string
+          updated_at?: string | null
+        }
+        Update: {
+          admin_reply?: string | null
+          created_at?: string | null
+          id?: string
+          message?: string
+          reseller_id?: string | null
+          reseller_name?: string
+          status?: string | null
+          subject?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sc_support_tickets_reseller_id_fkey"
+            columns: ["reseller_id"]
+            referencedRelation: "sc_resellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sc_wallet_mutations: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string | null
+          description: string | null
+          id: string
+          ref_id: string | null
+          reseller_id: string | null
+          reseller_name: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          ref_id?: string | null
+          reseller_id?: string | null
+          reseller_name?: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          ref_id?: string | null
+          reseller_id?: string | null
+          reseller_name?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sc_wallet_mutations_reseller_id_fkey"
+            columns: ["reseller_id"]
+            referencedRelation: "sc_resellers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

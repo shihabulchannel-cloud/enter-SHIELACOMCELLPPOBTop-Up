@@ -6,7 +6,7 @@ import {
   UserCog, KeyRound, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { isAdminLoggedIn, adminLogout, getAdminSession, changeAdminPassword } from '@/lib/admin-auth';
-import { notificationStore, logAction, depositStore, registrationStore } from '@/lib/store';
+import { notificationStore, logAction } from '@/lib/store';
 import AdminOverview from '@/components/admin/AdminOverview';
 import WebsiteManagement from '@/components/admin/WebsiteManagement';
 import BannerManager from '@/components/admin/BannerManager';
@@ -16,6 +16,7 @@ import ProviderSettings from '@/components/admin/ProviderSettings';
 import PaymentGatewaySettings from '@/components/admin/PaymentGatewaySettings';
 import MarkupSettings from '@/components/admin/MarkupSettings';
 import ResellerPanel from '@/components/admin/ResellerPanel';
+import BankAccountSettings from '@/components/admin/BankAccountSettings';
 import ContentPanel from '@/components/admin/ContentPanel';
 import ReportsPanel from '@/components/admin/ReportsPanel';
 import SystemPanel from '@/components/admin/SystemPanel';
@@ -32,7 +33,7 @@ type SectionKey =
   | 'website' | 'banners'
   | 'products' | 'categories'
   | 'provider' | 'payment' | 'markup'
-  | 'resellers' | 'deposits' | 'registrations'
+  | 'resellers' | 'deposits' | 'bank_accounts'
   | 'testimonials' | 'articles' | 'faqs'
   | 'transactions' | 'reports'
   | 'health' | 'logs' | 'notifications';
@@ -49,7 +50,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-function buildNav(unreadNotifs: number, pendingDeposits: number, pendingRegs: number): NavGroup[] {
+function buildNav(unreadNotifs: number, pendingDeposits: number): NavGroup[] {
   return [
     {
       group: 'Utama',
@@ -80,7 +81,7 @@ function buildNav(unreadNotifs: number, pendingDeposits: number, pendingRegs: nu
       items: [
         { key: 'resellers', label: 'Daftar Reseller', icon: Users },
         { key: 'deposits', label: 'Deposit', icon: CreditCard, badge: pendingDeposits || undefined },
-        { key: 'registrations', label: 'Pendaftaran', icon: FileText, badge: pendingRegs || undefined },
+        { key: 'bank_accounts', label: 'Rekening Bank', icon: CreditCard },
       ],
     },
     {
@@ -313,9 +314,9 @@ function SectionContent({ section, navigate: nav }: { section: SectionKey; navig
     case 'provider': return <ProviderSettings defaultTab="digiflazz" />;
     case 'payment': return <PaymentGatewaySettings />;
     case 'markup': return <MarkupSettings />;
-    case 'resellers': return <ResellerPanel defaultTab="resellers" />;
-    case 'deposits': return <ResellerPanel defaultTab="deposits" />;
-    case 'registrations': return <ResellerPanel defaultTab="registrations" />;
+    case 'resellers': return <ResellerPanel />;
+    case 'deposits': return <ResellerPanel />;
+    case 'bank_accounts': return <div className="space-y-6"><h2 className="text-xl font-bold text-foreground">Pengaturan Rekening Bank</h2><BankAccountSettings /></div>;
     case 'testimonials': return <ContentPanel defaultTab="testimonials" />;
     case 'articles': return <ContentPanel defaultTab="articles" />;
     case 'faqs': return <ContentPanel defaultTab="faqs" />;
@@ -337,7 +338,6 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [pendingDeposits, setPendingDeposits] = useState(0);
-  const [pendingRegs, setPendingRegs] = useState(0);
 
   useEffect(() => {
     if (!isAdminLoggedIn()) {
@@ -349,13 +349,14 @@ export default function AdminDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refreshBadges = () => {
+  const refreshBadges = async () => {
     setUnreadNotifs(notificationStore.unread());
-    setPendingDeposits(depositStore.get().filter((d) => d.status === 'pending').length);
-    setPendingRegs(registrationStore.get().filter((r) => r.status === 'pending').length);
+    const { count } = await supabase.from('sc_deposits').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+    setPendingDeposits(count || 0);
+    setPendingRegs(0);
   };
 
-  const navGroups = buildNav(unreadNotifs, pendingDeposits, pendingRegs);
+  const navGroups = buildNav(unreadNotifs, pendingDeposits);
 
   const handleNavigate = (key: SectionKey) => {
     setSection(key);

@@ -1,0 +1,114 @@
+-- ============================================================
+-- RESELLER SYSTEM MIGRATION
+-- Safe: only creates new tables, does NOT touch existing tables
+-- ============================================================
+
+-- 1. Reseller accounts
+CREATE TABLE IF NOT EXISTS sc_resellers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  username text UNIQUE NOT NULL,
+  password_hash text NOT NULL,
+  email text DEFAULT '',
+  whatsapp text DEFAULT '',
+  balance integer DEFAULT 0,
+  markup integer DEFAULT 0,
+  status text DEFAULT 'active',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  last_login timestamptz
+);
+ALTER TABLE sc_resellers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_resellers" ON sc_resellers FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 2. Admin bank accounts for deposit
+CREATE TABLE IF NOT EXISTS sc_bank_accounts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bank_name text NOT NULL,
+  account_number text NOT NULL,
+  account_name text NOT NULL,
+  active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_bank_accounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_bank_accounts" ON sc_bank_accounts FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 3. Deposit submissions
+CREATE TABLE IF NOT EXISTS sc_deposits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
+  reseller_name text NOT NULL DEFAULT '',
+  amount integer NOT NULL,
+  bank_target text DEFAULT '',
+  proof_image text DEFAULT '',
+  status text DEFAULT 'pending',
+  reject_reason text DEFAULT '',
+  notes text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_deposits ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_deposits" ON sc_deposits FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 4. Wallet mutation log
+CREATE TABLE IF NOT EXISTS sc_wallet_mutations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
+  reseller_name text NOT NULL DEFAULT '',
+  type text NOT NULL,
+  amount integer NOT NULL,
+  balance_before integer NOT NULL DEFAULT 0,
+  balance_after integer NOT NULL DEFAULT 0,
+  description text DEFAULT '',
+  ref_id text DEFAULT '',
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_wallet_mutations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_mutations" ON sc_wallet_mutations FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 5. Support tickets
+CREATE TABLE IF NOT EXISTS sc_support_tickets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
+  reseller_name text NOT NULL DEFAULT '',
+  subject text NOT NULL,
+  message text NOT NULL,
+  status text DEFAULT 'open',
+  admin_reply text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_support_tickets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_tickets" ON sc_support_tickets FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 6. Reseller orders
+CREATE TABLE IF NOT EXISTS sc_reseller_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
+  reseller_name text NOT NULL DEFAULT '',
+  invoice_id text UNIQUE NOT NULL DEFAULT ('RES-' || upper(substr(md5(random()::text), 1, 8))),
+  product_sku text NOT NULL,
+  product_name text NOT NULL,
+  product_price integer NOT NULL DEFAULT 0,
+  markup integer NOT NULL DEFAULT 0,
+  sell_price integer NOT NULL DEFAULT 0,
+  target text NOT NULL,
+  target_detail text DEFAULT '',
+  order_status text DEFAULT 'processing',
+  digiflazz_ref text DEFAULT '',
+  digiflazz_sn text DEFAULT '',
+  notes text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_reseller_orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_reseller_orders" ON sc_reseller_orders FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Realtime for reseller orders
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_reseller_orders;
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_deposits;
+
+-- Seed 1 sample bank account
+INSERT INTO sc_bank_accounts (bank_name, account_number, account_name, active)
+VALUES ('BCA', '1234567890', 'SHIELA STORE', true)
+ON CONFLICT DO NOTHING;
