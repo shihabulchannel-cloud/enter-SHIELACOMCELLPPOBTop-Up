@@ -23,7 +23,8 @@ Deno.serve(async (req: Request) => {
     const { action, reseller_id, amount, bank_target, proof_image, deposit_id, reject_reason, notes } = body;
 
     if (action === "submit") {
-      if (!reseller_id || !amount || amount < 1000) return respond({ error: "Nominal deposit minimal Rp1.000" });
+      if (!reseller_id) return respond({ error: "Sesi tidak valid, silakan login ulang" });
+      if (!amount || amount < 1000) return respond({ error: "Nominal deposit minimal Rp1.000" });
       const { data: reseller } = await supabase.from("sc_resellers").select("id,name").eq("id", reseller_id).maybeSingle();
       if (!reseller) return respond({ error: "Reseller tidak ditemukan" });
       const { data, error } = await supabase.from("sc_deposits").insert({ reseller_id, reseller_name: reseller.name, amount, bank_target: bank_target || "", proof_image: proof_image || "", status: "pending", notes: notes || "" }).select().single();
