@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { md5 } from "https://esm.sh/js-md5@0.8.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +18,7 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
   const { data: dfConfig } = await supabase.from("sc_digiflazz_config").select("*").eq("active", true).maybeSingle();
 
   if (!dfConfig || !dfConfig.username || !dfConfig.api_key) {
-    console.log("Digiflazz not configured, skipping automatic processing");
+    console.log("Digiflazz not configured, marking as processing");
     await supabase.from("sc_orders").update({
       order_status: "processing",
       notes: "Menunggu diproses oleh admin",
@@ -27,19 +28,26 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
   }
 
   const { data: product } = await supabase.from("sc_products").select("*").eq("sku", order.product_sku as string).maybeSingle();
-  if (!product) return;
+  if (!product) {
+    console.error("Product not found:", order.product_sku);
+    return;
+  }
 
   const refId = `${order.invoice_id}-${Date.now()}`;
-  const signature = await hmacSha256(dfConfig.api_key, `${dfConfig.username}${dfConfig.api_key}${refId}`);
+
+  // Signature resmi Digiflazz: md5(username + api_key + ref_id)
+  const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
 
   const dfBody = {
     username: dfConfig.username,
     buyer_sku_code: product.provider_code,
     customer_no: order.target as string,
     ref_id: refId,
-    sign: signature,
-    testing: true,
+    sign,
+    testing: dfConfig.testing === true || dfConfig.testing === "true",
   };
+
+  console.log("Sending to Digiflazz:", JSON.stringify({ ...dfBody, sign: "***" }));
 
   try {
     const res = await fetch("https://api.digiflazz.com/v1/transaction", {
@@ -85,6 +93,17 @@ Deno.serve(async (req: Request) => {
     let isPaid = false;
 
     if (gateway === "tripay") {
+      // Verifikasi signature Tripay dengan HMAC-SHA256
+      const { data: gwConfig } = await supabase.from("sc_payment_configs").select("*").eq("gateway", "tripay").maybeSingle();
+      const privateKey = (gwConfig?.config_json as Record<string, string>)?.private_key || "";
+      if (privateKey) {
+        const callbackSig = req.headers.get("x-callback-signature") || "";
+        const expectedSig = await hmacSha256(privateKey, body);
+        if (callbackSig && callbackSig !== expectedSig) {
+          console.warn("Tripay signature mismatch");
+          return new Response("Signature invalid", { status: 400 });
+        }
+      }
       invoiceId = payload.merchant_ref || "";
       isPaid = payload.status === "PAID";
     } else if (gateway === "duitku") {
@@ -96,7 +115,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!invoiceId) {
-      console.error("No invoice_id found in webhook payload");
+      console.error("No invoice_id in webhook payload");
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
