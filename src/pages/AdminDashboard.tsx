@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Globe, Image, Package, Tag, Zap, CreditCard, TrendingUp, Users,
-  FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield
+  FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield, Loader2
 } from 'lucide-react';
 import { isAdminLoggedIn, adminLogout } from '@/lib/admin-auth';
-import { notificationStore, logAction, transactionStore, depositStore, registrationStore, type Transaction } from '@/lib/store';
+import { notificationStore, logAction, depositStore, registrationStore } from '@/lib/store';
 import AdminOverview from '@/components/admin/AdminOverview';
 import WebsiteManagement from '@/components/admin/WebsiteManagement';
 import BannerManager from '@/components/admin/BannerManager';
@@ -18,6 +18,7 @@ import ResellerPanel from '@/components/admin/ResellerPanel';
 import ContentPanel from '@/components/admin/ContentPanel';
 import ReportsPanel from '@/components/admin/ReportsPanel';
 import SystemPanel from '@/components/admin/SystemPanel';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 // ============================================================
@@ -105,56 +106,86 @@ function buildNav(unreadNotifs: number, pendingDeposits: number, pendingRegs: nu
 }
 
 // ============================================================
-// TRANSACTIONS TABLE (inline)
+// TRANSACTIONS TABLE (real DB orders)
 // ============================================================
 function TransactionsTable() {
-  const txs = transactionStore.get();
+  const [orders, setOrders] = useState<Record<string, unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    supabase.from('sc_orders').select('*').order('created_at', { ascending: false }).limit(100)
+      .then(({ data }) => { setOrders(data || []); setLoading(false); });
+  }, []);
+
   const STATUS_CFG: Record<string, { label: string; cls: string }> = {
-    pending: { label: 'Pending', cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
+    waiting_payment: { label: 'Menunggu Bayar', cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
     processing: { label: 'Diproses', cls: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
     success: { label: 'Sukses', cls: 'bg-green-500/10 text-green-600 border-green-500/30' },
     failed: { label: 'Gagal', cls: 'bg-red-500/10 text-red-500 border-red-500/30' },
   };
 
+  const filtered = filter === 'all' ? orders : orders.filter(o => o.order_status === filter);
+
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-xl font-bold text-foreground">Riwayat Transaksi</h2>
-        <p className="text-muted-foreground text-sm">{txs.length} transaksi total</p>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Riwayat Transaksi</h2>
+          <p className="text-muted-foreground text-sm">{orders.length} total order</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {['all', 'waiting_payment', 'processing', 'success', 'failed'].map(s => (
+            <button key={s} onClick={() => setFilter(s)} className={cn('px-3 py-1.5 rounded-xl text-xs font-semibold transition-all', filter === s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-primary/10')}>
+              {s === 'all' ? 'Semua' : STATUS_CFG[s]?.label || s}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Invoice</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Produk</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tujuan</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Nominal</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Profit</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {txs.map((tx: Transaction) => {
-                const cfg = STATUS_CFG[tx.status] || STATUS_CFG.pending;
-                return (
-                  <tr key={tx.id} className="border-b border-border/30 last:border-0 hover:bg-muted/10 transition-colors">
-                    <td className="px-4 py-3 text-xs font-medium text-primary">{tx.invoiceId}</td>
-                    <td className="px-4 py-3 text-sm text-foreground">{tx.product}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{tx.destination}</td>
-                    <td className="px-4 py-3 text-sm text-foreground font-medium text-right">Rp {tx.amount.toLocaleString('id-ID')}</td>
-                    <td className="px-4 py-3 text-sm text-primary font-medium text-right">+Rp {(tx.profit || 0).toLocaleString('id-ID')}</td>
-                    <td className="px-4 py-3">
-                      <span className={cn('text-xs font-semibold px-2 py-1 rounded-full border', cfg.cls)}>{cfg.label}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {txs.length === 0 && <div className="text-center py-12 text-muted-foreground">Belum ada transaksi</div>}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" /> Memuat data...
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Invoice</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Produk</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tujuan</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Pembeli</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Total</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Metode</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tanggal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((o) => {
+                  const status = String(o.order_status || 'waiting_payment');
+                  const cfg = STATUS_CFG[status] || STATUS_CFG.waiting_payment;
+                  return (
+                    <tr key={String(o.id)} className="border-b border-border/30 last:border-0 hover:bg-muted/10 transition-colors">
+                      <td className="px-4 py-3 text-xs font-medium text-primary font-mono">{String(o.invoice_id || '')}</td>
+                      <td className="px-4 py-3 text-sm text-foreground max-w-[140px] truncate">{String(o.product_name || '')}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{String(o.target || '')}{o.target_detail ? ` (${o.target_detail})` : ''}</td>
+                      <td className="px-4 py-3 text-sm text-foreground">{String(o.buyer_name || '')}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-foreground text-right">Rp {Number(o.payment_amount || 0).toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{String(o.payment_method || '')}</td>
+                      <td className="px-4 py-3">
+                        <span className={cn('text-xs font-semibold px-2 py-1 rounded-full border', cfg.cls)}>{cfg.label}</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(String(o.created_at)).toLocaleString('id-ID')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filtered.length === 0 && <div className="text-center py-12 text-muted-foreground">Belum ada transaksi</div>}
+          </div>
+        )}
       </div>
     </div>
   );

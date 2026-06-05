@@ -7,6 +7,9 @@ import Reseller from "./pages/Reseller";
 import Kontak from "./pages/Kontak";
 import Admin from "./pages/Admin";
 import AdminDashboard from "./pages/AdminDashboard";
+import Order from "./pages/Order";
+import Payment from "./pages/Payment";
+import OrderStatus from "./pages/OrderStatus";
 import NotFound from "./pages/NotFound";
 
 export const routers = [
@@ -19,6 +22,21 @@ export const routers = [
     path: "/products",
     name: "products",
     element: <Products />,
+  },
+  {
+    path: "/order/:productSku",
+    name: "order",
+    element: <Order />,
+  },
+  {
+    path: "/payment/:invoiceId",
+    name: "payment",
+    element: <Payment />,
+  },
+  {
+    path: "/order-status/:invoiceId",
+    name: "order-status",
+    element: <OrderStatus />,
   },
   {
     path: "/cara-transaksi",

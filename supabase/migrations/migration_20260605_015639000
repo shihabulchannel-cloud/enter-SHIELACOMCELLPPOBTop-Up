@@ -1,0 +1,164 @@
+
+-- ============================================================
+-- SHIELACOM CELL - Full Transaction System Tables
+-- ============================================================
+
+-- Products table
+CREATE TABLE IF NOT EXISTS sc_products (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sku text UNIQUE NOT NULL,
+  name text NOT NULL,
+  category_id text NOT NULL DEFAULT 'pulsa',
+  brand text DEFAULT '',
+  description text DEFAULT '',
+  buy_price integer NOT NULL DEFAULT 0,
+  sell_price integer NOT NULL DEFAULT 0,
+  active boolean DEFAULT true,
+  provider text DEFAULT 'digiflazz',
+  provider_code text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sc_products ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public_read_active_products"
+  ON sc_products FOR SELECT
+  USING (active = true);
+
+CREATE POLICY "service_role_all_products"
+  ON sc_products
+  USING (true)
+  WITH CHECK (true);
+
+-- Orders table
+CREATE TABLE IF NOT EXISTS sc_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id text UNIQUE NOT NULL,
+  product_sku text NOT NULL,
+  product_name text NOT NULL,
+  product_price integer NOT NULL DEFAULT 0,
+  buyer_name text NOT NULL DEFAULT '',
+  buyer_email text DEFAULT '',
+  buyer_whatsapp text DEFAULT '',
+  target text NOT NULL DEFAULT '',
+  target_detail text DEFAULT '',
+  payment_method text DEFAULT '',
+  payment_gateway text DEFAULT '',
+  payment_amount integer NOT NULL DEFAULT 0,
+  payment_fee integer DEFAULT 0,
+  payment_status text DEFAULT 'pending',
+  payment_code text DEFAULT '',
+  payment_url text DEFAULT '',
+  order_status text DEFAULT 'waiting_payment',
+  digiflazz_ref text DEFAULT '',
+  digiflazz_sn text DEFAULT '',
+  notes text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  expired_at timestamptz DEFAULT (now() + interval '1 hour')
+);
+
+ALTER TABLE sc_orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public_insert_orders"
+  ON sc_orders FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "public_read_orders"
+  ON sc_orders FOR SELECT
+  USING (true);
+
+CREATE POLICY "service_role_update_orders"
+  ON sc_orders FOR UPDATE
+  USING (true);
+
+-- Payment gateway configs
+CREATE TABLE IF NOT EXISTS sc_payment_configs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  gateway text UNIQUE NOT NULL,
+  config_json jsonb DEFAULT '{}',
+  active boolean DEFAULT false,
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sc_payment_configs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_payment_configs"
+  ON sc_payment_configs
+  USING (true)
+  WITH CHECK (true);
+
+-- Digiflazz config
+CREATE TABLE IF NOT EXISTS sc_digiflazz_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  username text DEFAULT '',
+  api_key text DEFAULT '',
+  webhook_secret text DEFAULT '',
+  active boolean DEFAULT false,
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sc_digiflazz_config ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_digiflazz_config"
+  ON sc_digiflazz_config
+  USING (true)
+  WITH CHECK (true);
+
+-- Insert default payment configs
+INSERT INTO sc_payment_configs (gateway, config_json, active)
+VALUES
+  ('tripay', '{"api_key":"","merchant_code":"","private_key":"","sandbox":true}', false),
+  ('duitku', '{"merchant_code":"","api_key":"","sandbox":true}', false),
+  ('ipaymu', '{"va":"","api_key":"","sandbox":true}', false)
+ON CONFLICT (gateway) DO NOTHING;
+
+-- Insert default digiflazz config
+INSERT INTO sc_digiflazz_config (username, api_key, webhook_secret, active)
+VALUES ('', '', '', false)
+ON CONFLICT DO NOTHING;
+
+-- Seed sample products
+INSERT INTO sc_products (sku, name, category_id, brand, buy_price, sell_price, provider, provider_code, active)
+VALUES
+  ('TSEL5', 'Pulsa Telkomsel 5.000', 'pulsa', 'Telkomsel', 5500, 6000, 'digiflazz', 'TSEL5', true),
+  ('TSEL10', 'Pulsa Telkomsel 10.000', 'pulsa', 'Telkomsel', 10500, 11000, 'digiflazz', 'TSEL10', true),
+  ('TSEL25', 'Pulsa Telkomsel 25.000', 'pulsa', 'Telkomsel', 25200, 26000, 'digiflazz', 'TSEL25', true),
+  ('TSEL50', 'Pulsa Telkomsel 50.000', 'pulsa', 'Telkomsel', 50500, 51500, 'digiflazz', 'TSEL50', true),
+  ('XL10', 'Pulsa XL 10.000', 'pulsa', 'XL', 10500, 11000, 'digiflazz', 'XL10', true),
+  ('XL25', 'Pulsa XL 25.000', 'pulsa', 'XL', 25200, 26000, 'digiflazz', 'XL25', true),
+  ('INDOSAT10', 'Pulsa Indosat 10.000', 'pulsa', 'Indosat', 10500, 11000, 'digiflazz', 'INDOSAT10', true),
+  ('INDOSAT25', 'Pulsa Indosat 25.000', 'pulsa', 'Indosat', 25200, 26000, 'digiflazz', 'INDOSAT25', true),
+  ('MLBB86', 'Mobile Legends 86 Diamonds', 'game', 'Mobile Legends', 18500, 20000, 'digiflazz', 'MLBB86', true),
+  ('MLBB172', 'Mobile Legends 172 Diamonds', 'game', 'Mobile Legends', 37500, 39000, 'digiflazz', 'MLBB172', true),
+  ('MLBB257', 'Mobile Legends 257 Diamonds', 'game', 'Mobile Legends', 55500, 57500, 'digiflazz', 'MLBB257', true),
+  ('MLBB570', 'Mobile Legends 570 Diamonds', 'game', 'Mobile Legends', 122000, 126000, 'digiflazz', 'MLBB570', true),
+  ('FF70', 'Free Fire 70 Diamonds', 'game', 'Free Fire', 14000, 15500, 'digiflazz', 'FF70', true),
+  ('FF140', 'Free Fire 140 Diamonds', 'game', 'Free Fire', 27500, 29000, 'digiflazz', 'FF140', true),
+  ('FF355', 'Free Fire 355 Diamonds', 'game', 'Free Fire', 68000, 71000, 'digiflazz', 'FF355', true),
+  ('PUBGM60', 'PUBG Mobile 60 UC', 'game', 'PUBG Mobile', 14500, 16000, 'digiflazz', 'PUBGM60', true),
+  ('PUBGM325', 'PUBG Mobile 325 UC', 'game', 'PUBG Mobile', 72000, 75000, 'digiflazz', 'PUBGM325', true),
+  ('GENSHIN60', 'Genshin Impact 60 Genesis', 'game', 'Genshin Impact', 14000, 15500, 'digiflazz', 'GENSHIN60', true),
+  ('GENSHIN330', 'Genshin Impact 330 Genesis', 'game', 'Genshin Impact', 72000, 75000, 'digiflazz', 'GENSHIN330', true),
+  ('PLN20', 'Token PLN 20.000', 'pln', 'PLN', 21000, 22000, 'digiflazz', 'PLN20', true),
+  ('PLN50', 'Token PLN 50.000', 'pln', 'PLN', 51000, 52500, 'digiflazz', 'PLN50', true),
+  ('PLN100', 'Token PLN 100.000', 'pln', 'PLN', 102000, 103500, 'digiflazz', 'PLN100', true),
+  ('PLN200', 'Token PLN 200.000', 'pln', 'PLN', 202000, 204000, 'digiflazz', 'PLN200', true),
+  ('GOPAY20', 'GoPay 20.000', 'ewallet', 'GoPay', 20500, 21000, 'digiflazz', 'GOPAY20', true),
+  ('GOPAY50', 'GoPay 50.000', 'ewallet', 'GoPay', 50500, 51500, 'digiflazz', 'GOPAY50', true),
+  ('GOPAY100', 'GoPay 100.000', 'ewallet', 'GoPay', 100500, 102000, 'digiflazz', 'GOPAY100', true),
+  ('OVO20', 'OVO 20.000', 'ewallet', 'OVO', 20500, 21000, 'digiflazz', 'OVO20', true),
+  ('OVO50', 'OVO 50.000', 'ewallet', 'OVO', 50500, 51500, 'digiflazz', 'OVO50', true),
+  ('DANA20', 'DANA 20.000', 'ewallet', 'DANA', 20500, 21000, 'digiflazz', 'DANA20', true),
+  ('DANA50', 'DANA 50.000', 'ewallet', 'DANA', 50500, 51500, 'digiflazz', 'DANA50', true),
+  ('SHOPEEPAY50', 'ShopeePay 50.000', 'ewallet', 'ShopeePay', 50500, 51500, 'digiflazz', 'SHOPEEPAY50', true),
+  ('BPJSKS', 'BPJS Kesehatan', 'ppob', 'BPJS', 0, 2500, 'digiflazz', 'BPJSKS', true),
+  ('XL5GB', 'Paket Data XL 5GB 30hr', 'data', 'XL', 32000, 34000, 'digiflazz', 'XL5GB', true),
+  ('XL10GB', 'Paket Data XL 10GB 30hr', 'data', 'XL', 62000, 65000, 'digiflazz', 'XL10GB', true),
+  ('TSEL5GB', 'Paket Data Telkomsel 5GB', 'data', 'Telkomsel', 33000, 35000, 'digiflazz', 'TSEL5GB', true),
+  ('TSEL15GB', 'Paket Data Telkomsel 15GB', 'data', 'Telkomsel', 68000, 71000, 'digiflazz', 'TSEL15GB', true)
+ON CONFLICT (sku) DO NOTHING;
+
+-- Enable realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_orders;

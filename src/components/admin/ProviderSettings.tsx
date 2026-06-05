@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  providerConfigStore, providerPriorityStore, categoryStore, syncDigiflazzProducts,
+  providerConfigStore, providerPriorityStore, categoryStore,
   type ProviderConfig, type ProviderPriority, logAction
 } from '@/lib/store';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 type Tab = 'digiflazz' | 'vip' | 'priority';
@@ -59,18 +60,33 @@ function DigiflazzSettings() {
     }, 1500);
   };
 
-  const handleSync = () => {
-    if (!cfg.enabled && (!cfg.username || !cfg.apiKey)) {
-      setSyncResult('Harap isi dan tes koneksi Digiflazz terlebih dahulu');
+  const handleSync = async () => {
+    if (!cfg.username || !cfg.apiKey) {
+      setSyncResult('Harap isi Username dan API Key Digiflazz terlebih dahulu');
       return;
     }
     setSyncing(true);
     setSyncResult('');
-    setTimeout(() => {
-      const count = syncDigiflazzProducts();
-      setSyncResult(`Berhasil sync ${count} produk baru dari Digiflazz!`);
+    try {
+      // Save config to DB first
+      await supabase.from('sc_digiflazz_config').upsert({
+        username: cfg.username,
+        api_key: cfg.apiKey,
+        webhook_secret: cfg.webhookUrl || '',
+        active: true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+
+      const { data, error } = await supabase.functions.invoke('sync-products');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSyncResult(`Berhasil sync ${data.synced} produk dari Digiflazz! (${data.skipped} dilewati)`);
+      logAction('DIGIFLAZZ_SYNC', `Sync ${data.synced} produk dari Digiflazz`);
+    } catch (e: unknown) {
+      setSyncResult(`Gagal sync: ${e instanceof Error ? e.message : 'Error tidak diketahui'}`);
+    } finally {
       setSyncing(false);
-    }, 2000);
+    }
   };
 
   return (

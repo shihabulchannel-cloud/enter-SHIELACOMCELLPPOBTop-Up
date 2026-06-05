@@ -3109,7 +3109,186 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      sc_digiflazz_config: {
+        Row: {
+          active: boolean | null
+          api_key: string | null
+          id: string
+          updated_at: string | null
+          username: string | null
+          webhook_secret: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          api_key?: string | null
+          id?: string
+          updated_at?: string | null
+          username?: string | null
+          webhook_secret?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          api_key?: string | null
+          id?: string
+          updated_at?: string | null
+          username?: string | null
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      sc_orders: {
+        Row: {
+          buyer_email: string | null
+          buyer_name: string
+          buyer_whatsapp: string | null
+          created_at: string | null
+          digiflazz_ref: string | null
+          digiflazz_sn: string | null
+          expired_at: string | null
+          id: string
+          invoice_id: string
+          notes: string | null
+          order_status: string | null
+          payment_amount: number
+          payment_code: string | null
+          payment_fee: number | null
+          payment_gateway: string | null
+          payment_method: string | null
+          payment_status: string | null
+          payment_url: string | null
+          product_name: string
+          product_price: number
+          product_sku: string
+          target: string
+          target_detail: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          buyer_email?: string | null
+          buyer_name?: string
+          buyer_whatsapp?: string | null
+          created_at?: string | null
+          digiflazz_ref?: string | null
+          digiflazz_sn?: string | null
+          expired_at?: string | null
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          order_status?: string | null
+          payment_amount?: number
+          payment_code?: string | null
+          payment_fee?: number | null
+          payment_gateway?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
+          payment_url?: string | null
+          product_name: string
+          product_price?: number
+          product_sku: string
+          target?: string
+          target_detail?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          buyer_email?: string | null
+          buyer_name?: string
+          buyer_whatsapp?: string | null
+          created_at?: string | null
+          digiflazz_ref?: string | null
+          digiflazz_sn?: string | null
+          expired_at?: string | null
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          order_status?: string | null
+          payment_amount?: number
+          payment_code?: string | null
+          payment_fee?: number | null
+          payment_gateway?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
+          payment_url?: string | null
+          product_name?: string
+          product_price?: number
+          product_sku?: string
+          target?: string
+          target_detail?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      sc_payment_configs: {
+        Row: {
+          active: boolean | null
+          config_json: Json | null
+          gateway: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          config_json?: Json | null
+          gateway: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          config_json?: Json | null
+          gateway?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      sc_products: {
+        Row: {
+          active: boolean | null
+          brand: string | null
+          buy_price: number
+          category_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          provider: string | null
+          provider_code: string | null
+          sell_price: number
+          sku: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          brand?: string | null
+          buy_price?: number
+          category_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          provider?: string | null
+          provider_code?: string | null
+          sell_price?: number
+          sku: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          brand?: string | null
+          buy_price?: number
+          category_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          provider?: string | null
+          provider_code?: string | null
+          sell_price?: number
+          sku?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

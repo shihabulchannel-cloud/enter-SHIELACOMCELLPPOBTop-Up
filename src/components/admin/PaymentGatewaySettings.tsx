@@ -4,7 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { paymentGatewayStore, type PaymentGatewayConfig, logAction } from '@/lib/store';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+
+async function saveGatewayToDb(gateway: string, configJson: Record<string, unknown>, active: boolean) {
+  await supabase.from('sc_payment_configs').upsert({
+    gateway,
+    config_json: configJson,
+    active,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'gateway' });
+}
 
 type GwTab = 'duitku' | 'ipaymu' | 'tripay';
 
@@ -43,9 +53,10 @@ function DuitkuSettings() {
   const [testing, setTesting] = useState(false);
   const f = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const all = paymentGatewayStore.get();
     paymentGatewayStore.set({ ...all, duitku: cfg });
+    await saveGatewayToDb('duitku', { merchant_code: cfg.merchantCode, api_key: cfg.apiKey, sandbox: String(!cfg.enabled) }, cfg.enabled);
     logAction('DUITKU_SAVE', 'Simpan konfigurasi Duitku');
     setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
@@ -99,9 +110,10 @@ function IpaymuSettings() {
   const [testing, setTesting] = useState(false);
   const f = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const all = paymentGatewayStore.get();
     paymentGatewayStore.set({ ...all, ipaymu: cfg });
+    await saveGatewayToDb('ipaymu', { va: cfg.va, api_key: cfg.apiKey, sandbox: String(!cfg.enabled) }, cfg.enabled);
     logAction('IPAYMU_SAVE', 'Simpan konfigurasi iPaymu');
     setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
@@ -155,9 +167,10 @@ function TripaySettings() {
   const [testing, setTesting] = useState(false);
   const f = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const all = paymentGatewayStore.get();
     paymentGatewayStore.set({ ...all, tripay: cfg });
+    await saveGatewayToDb('tripay', { api_key: cfg.apiKey, merchant_code: cfg.merchantCode, private_key: cfg.privateKey, sandbox: String(!cfg.enabled) }, cfg.enabled);
     logAction('TRIPAY_SAVE', 'Simpan konfigurasi Tripay');
     setSaved(true); setTimeout(() => setSaved(false), 3000);
   };
