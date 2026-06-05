@@ -18,7 +18,7 @@ export async function resellerLogin(username: string, password: string): Promise
     const { data, error } = await supabase.functions.invoke('reseller-auth', { body: { action: 'login', username, password } });
     if (error) return { success: false, error: error.message };
     if (data?.error) return { success: false, error: data.error };
-    const session: ResellerSession = { ...data.reseller, session_token: data.session_token, expires_at: Date.now() + 24 * 60 * 60 * 1000 };
+    const session: ResellerSession = { ...data.reseller, session_token: btoa(JSON.stringify(data.reseller)), expires_at: Date.now() + 24 * 60 * 60 * 1000 };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     return { success: true, reseller: session };
   } catch (e) {
