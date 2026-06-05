@@ -75,7 +75,6 @@ Deno.serve(async (req: Request) => {
     log("=== SYNC PRODUK DIGIFLAZZ DIMULAI ===");
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // STEP 1: Baca config — filter by provider='digiflazz', limit 1
     log("STEP 1: Membaca konfigurasi Digiflazz dari database...");
     const { data: dfConfig, error: cfgErr } = await supabase
       .from("sc_digiflazz_config")
@@ -85,27 +84,16 @@ Deno.serve(async (req: Request) => {
       .limit(1)
       .maybeSingle();
 
-    if (cfgErr) {
-      log(`ERROR: Gagal baca config: ${cfgErr.message}`);
-      return respond({ success: false, error: cfgErr.message });
-    }
-    if (!dfConfig) {
-      log("ERROR: Konfigurasi Digiflazz tidak ditemukan.");
-      return respond({ success: false, error: "Konfigurasi Digiflazz tidak ditemukan. Isi dan simpan terlebih dahulu." });
-    }
-    if (!dfConfig.username || !dfConfig.api_key) {
-      log(`ERROR: Username='${dfConfig.username}' atau API Key kosong`);
-      return respond({ success: false, error: "Username atau API Key Digiflazz belum diisi." });
-    }
-    log(`OK: username=${dfConfig.username}, api_key=***${String(dfConfig.api_key).slice(-4)}`);
+    if (cfgErr) { log(`ERROR: ${cfgErr.message}`); return respond({ success: false, error: cfgErr.message }); }
+    if (!dfConfig) return respond({ success: false, error: "Konfigurasi Digiflazz tidak ditemukan." });
+    if (!dfConfig.username || !dfConfig.api_key) return respond({ success: false, error: "Username atau API Key belum diisi." });
+    log(`OK: username=${dfConfig.username}`);
 
-    // STEP 2: Signature MD5
-    log("STEP 2: Membuat signature MD5(username + api_key + 'pricelist')...");
+    log("STEP 2: Membuat signature MD5...");
     const sign = md5(`${dfConfig.username}${dfConfig.api_key}pricelist`);
     log(`OK: sign=${sign}`);
 
-    // STEP 3: Panggil Digiflazz API
-    log("STEP 3: Memanggil https://api.digiflazz.com/v1/price-list ...");
+    log("STEP 3: Memanggil Digiflazz API price-list...");
     const res = await fetch("https://api.digiflazz.com/v1/price-list", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,37 +103,35 @@ Deno.serve(async (req: Request) => {
 
     if (!res.ok) {
       const errText = await res.text();
-      log(`ERROR: HTTP ${res.status} — ${errText}`);
-      return respond({ success: false, error: `Digiflazz HTTP error: ${res.status}`, detail: errText });
+      return respond({ success: false, error: `HTTP ${res.status}: ${errText}` });
     }
 
-    // STEP 4: Parse response
-    // PENTING: /v1/price-list tidak selalu mengembalikan field 'rc'
-    // Response sukses hanya berisi { "data": [...] }
-    // Response error berisi { "rc": "XX", "message": "..." }
-    log("STEP 4: Parsing response Digiflazz...");
+    log("STEP 4: Parsing response...");
     const responseData = await res.json();
     const rc = responseData.rc;
     const apiMsg = responseData.message || "-";
-    log(`Keys: ${Object.keys(responseData).join(", ")}`);
-    log(`RC=${rc ?? "tidak ada (normal untuk price-list)"}, message=${apiMsg}`);
+    log(`Keys: ${Object.keys(responseData).join(", ")}, RC=${rc ?? "tidak ada"}, message=${apiMsg}`);
 
-    // Cek jika data adalah array — ini tanda sukses
+    // Handle sukses: data adalah array langsung
     if (!Array.isArray(responseData.data)) {
-      // rc ada dan bukan "00" → error autentikasi
-      if (rc && rc !== "00") {
-        log(`ERROR: Digiflazz RC=${rc} — ${apiMsg}`);
-        return respond({ success: false, error: `Digiflazz error RC=${rc}: ${apiMsg}` });
+      // Error format baru: { "data": { "rc": "83", "message": "..." } }
+      const innerData = responseData.data;
+      if (innerData && typeof innerData === "object" && innerData.rc) {
+        const iRc = String(innerData.rc);
+        const iMsg = String(innerData.message || "Error Digiflazz");
+        log(`ERROR: data.rc=${iRc} — ${iMsg}`);
+        if (iRc === "83") return respond({ success: false, error: `Rate limit Digiflazz: ${iMsg}. Tunggu beberapa menit lalu coba lagi.` });
+        return respond({ success: false, error: `Digiflazz RC=${iRc}: ${iMsg}` });
       }
-      // rc undefined dan data juga tidak ada → format tidak dikenal
-      log(`ERROR: response.data bukan array. Full: ${JSON.stringify(responseData).slice(0, 500)}`);
-      return respond({ success: false, error: `Response Digiflazz tidak valid: ${JSON.stringify(responseData).slice(0, 200)}` });
+      // Error format lama: { "rc": "XX", "message": "..." }
+      if (rc && rc !== "00") return respond({ success: false, error: `Digiflazz RC=${rc}: ${apiMsg}` });
+      log(`ERROR: data bukan array: ${JSON.stringify(responseData).slice(0, 300)}`);
+      return respond({ success: false, error: `Format response tidak valid: ${JSON.stringify(responseData).slice(0, 150)}` });
     }
 
     const products = responseData.data;
-    log(`OK: Diterima ${products.length} produk dari Digiflazz`);
+    log(`OK: ${products.length} produk diterima`);
 
-    // STEP 5: Simpan ke database batch 100
     log("STEP 5: Menyimpan ke database (batch 100)...");
     let synced = 0, skipped = 0;
     const dbErrors: string[] = [];
@@ -184,11 +170,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati, ${dbErrors.length} error ===`);
+    log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati ===`);
     return respond({ success: true, synced, skipped, total: products.length, db_errors: dbErrors });
 
   } catch (err) {
-    const msg = err instanceof Error ? `${err.message}` : String(err);
+    const msg = err instanceof Error ? err.message : String(err);
     log(`EXCEPTION: ${msg}`);
     return respond({ success: false, error: msg });
   }
