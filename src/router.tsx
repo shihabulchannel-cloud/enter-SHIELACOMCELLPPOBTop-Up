@@ -21,6 +21,9 @@ import ResellerMutations from "./pages/reseller/Mutations";
 import ResellerProfile from "./pages/reseller/Profile";
 import ResellerSupport from "./pages/reseller/Support";
 import ResellerRoute from "./components/reseller/ResellerRoute";
+import RefundPolicy from "./pages/RefundPolicy";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsConditions from "./pages/TermsConditions";
 
 export const routers = [
   {
@@ -83,6 +86,10 @@ export const routers = [
     name: "admin-dashboard",
     element: <AdminDashboard />,
   },
+  /* --- LEGAL PAGES --- */
+  { path: "/refund-policy", name: "refund-policy", element: <RefundPolicy /> },
+  { path: "/privacy-policy", name: "privacy-policy", element: <PrivacyPolicy /> },
+  { path: "/terms-and-conditions", name: "terms-and-conditions", element: <TermsConditions /> },
   /* --- RESELLER ROUTES --- */
   { path: "/reseller/login", name: "reseller-login", element: <ResellerLogin /> },
   { path: "/reseller/register", name: "reseller-register", element: <ResellerRegister /> },

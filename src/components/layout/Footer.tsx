@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Facebook, Instagram, Youtube, Send, MessageCircle } from 'lucide-react';
+import { Zap, Facebook, Instagram, Youtube, Send, MessageCircle, MapPin, Clock, Mail } from 'lucide-react';
 import { siteSettingsStore, socialMediaStore } from '@/lib/store';
 import { subscribeToStore } from '@/lib/events';
+import { useCompanyInfo } from '@/hooks/useLegalData';
 
 const QUICK_LINKS = [
   { href: '/products', label: 'Produk Digital' },
@@ -13,18 +14,16 @@ const QUICK_LINKS = [
   { href: '/kontak', label: 'Kontak' },
 ];
 
-const PRODUCT_LINKS = [
-  { href: '/products', label: 'Pulsa & Data' },
-  { href: '/products', label: 'Top Up Game' },
-  { href: '/products', label: 'E-Wallet' },
-  { href: '/products', label: 'Token PLN' },
-  { href: '/products', label: 'PPOB' },
-  { href: '/products', label: 'Voucher Digital' },
+const LEGAL_LINKS = [
+  { href: '/refund-policy', label: 'Kebijakan Refund' },
+  { href: '/privacy-policy', label: 'Kebijakan Privasi' },
+  { href: '/terms-and-conditions', label: 'Syarat & Ketentuan' },
 ];
 
 export default function Footer() {
   const [settings, setSettings] = useState(siteSettingsStore.get());
   const [social, setSocial] = useState(socialMediaStore.get());
+  const { company } = useCompanyInfo();
 
   useEffect(() => {
     const u1 = subscribeToStore('siteSettings', () => setSettings(siteSettingsStore.get()));
@@ -32,7 +31,8 @@ export default function Footer() {
     return () => { u1(); u2(); };
   }, []);
 
-  const waLink = `https://wa.me/${social.whatsapp}`;
+  const waNumber = company.whatsapp || social.whatsapp;
+  const waLink = waNumber ? `https://wa.me/${waNumber}` : '#';
 
   return (
     <footer className="bg-brand-dark text-white relative overflow-hidden">
@@ -56,18 +56,38 @@ export default function Footer() {
                     <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
                       <Zap className="w-4 h-4 text-white" />
                     </div>
-                    <span className="font-extrabold text-lg text-white">{settings.siteName}</span>
+                    <span className="font-extrabold text-lg text-white">{company.business_name || settings.siteName}</span>
                   </div>
                 )}
               </Link>
-              <p className="text-white/60 text-sm leading-relaxed mb-4">
-                {settings.tagline}
-              </p>
-              <p className="text-white/40 text-xs mb-1">{settings.email}</p>
-              <p className="text-white/40 text-xs">{settings.address}</p>
+              <p className="text-white/60 text-sm leading-relaxed mb-3">{settings.tagline}</p>
+              {company.address && (
+                <div className="flex items-start gap-1.5 mb-1">
+                  <MapPin className="w-3.5 h-3.5 text-primary/80 mt-0.5 flex-shrink-0" />
+                  <p className="text-white/40 text-xs leading-snug">{company.address}{company.city ? `, ${company.city}` : ''}</p>
+                </div>
+              )}
+              {(company.whatsapp || social.whatsapp) && (
+                <div className="flex items-center gap-1.5 mb-1">
+                  <MessageCircle className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />
+                  <p className="text-white/40 text-xs">{company.whatsapp || social.whatsapp}</p>
+                </div>
+              )}
+              {company.email && (
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Mail className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />
+                  <p className="text-white/40 text-xs">{company.email}</p>
+                </div>
+              )}
+              {company.operating_hours && (
+                <div className="flex items-center gap-1.5 mb-3">
+                  <Clock className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />
+                  <p className="text-white/40 text-xs">{company.operating_hours}</p>
+                </div>
+              )}
               {/* Social Media */}
-              <div className="flex gap-2 mt-4 flex-wrap">
-                {social.whatsapp && (
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {waNumber && (
                   <a href={waLink} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-xl bg-white/10 hover:bg-primary/30 flex items-center justify-center transition-colors" title="WhatsApp">
                     <MessageCircle className="w-4 h-4" />
                   </a>
@@ -118,7 +138,14 @@ export default function Footer() {
             <div>
               <h3 className="font-bold text-white mb-4 text-sm">Produk Kami</h3>
               <ul className="space-y-2">
-                {PRODUCT_LINKS.map(link => (
+                {[
+                  { href: '/products', label: 'Pulsa & Data' },
+                  { href: '/products', label: 'Top Up Game' },
+                  { href: '/products', label: 'E-Wallet' },
+                  { href: '/products', label: 'Token PLN' },
+                  { href: '/products', label: 'PPOB' },
+                  { href: '/products', label: 'Voucher Digital' },
+                ].map(link => (
                   <li key={link.label}>
                     <Link to={link.href} className="text-white/60 hover:text-white text-sm transition-colors">
                       {link.label}
@@ -128,33 +155,47 @@ export default function Footer() {
               </ul>
             </div>
 
-            {/* Contact */}
+            {/* Contact + Legal */}
             <div>
               <h3 className="font-bold text-white mb-4 text-sm">Hubungi Kami</h3>
-              <div className="space-y-3">
-                <div className="flex items-start gap-2">
-                  <MessageCircle className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-white/60 text-xs">WhatsApp / CS</p>
-                    <a href={waLink} target="_blank" rel="noopener noreferrer" className="text-white text-sm font-medium hover:text-primary transition-colors">
-                      +{social.whatsapp}
-                    </a>
+              <div className="space-y-3 mb-6">
+                {waNumber && (
+                  <div className="flex items-start gap-2">
+                    <MessageCircle className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-white/60 text-xs">WhatsApp / CS</p>
+                      <a href={waLink} target="_blank" rel="noopener noreferrer" className="text-white text-sm font-medium hover:text-primary transition-colors">
+                        +{waNumber}
+                      </a>
+                    </div>
                   </div>
-                </div>
+                )}
                 <a href={waLink} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all mt-2"
+                  className="flex items-center gap-2 bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all"
                 >
                   <MessageCircle className="w-4 h-4" />
                   Chat via WhatsApp
                 </a>
               </div>
+              <h3 className="font-bold text-white mb-3 text-sm">Legal</h3>
+              <ul className="space-y-2">
+                {LEGAL_LINKS.map(link => (
+                  <li key={link.label}>
+                    <Link to={link.href} className="text-white/60 hover:text-white text-xs transition-colors">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
 
           {/* Bottom */}
           <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-white/40">
-            <p>© {new Date().getFullYear()} {settings.siteName}. All rights reserved.</p>
-            <p>Transaksi Digital Cepat, Murah, Aman & Terpercaya</p>
+            <p>© {new Date().getFullYear()} {company.business_name || settings.siteName}. All rights reserved.</p>
+            <div className="flex items-center gap-4">
+              {LEGAL_LINKS.map(l => <Link key={l.href} to={l.href} className="hover:text-white/70 transition-colors">{l.label}</Link>)}
+            </div>
           </div>
         </div>
       </div>

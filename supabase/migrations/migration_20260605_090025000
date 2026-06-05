@@ -1,0 +1,62 @@
+-- ============================================================
+-- LEGAL PAGES + COMPANY INFO MIGRATION
+-- Safe: only adds new tables, does NOT touch existing tables
+-- ============================================================
+
+-- 1. Legal pages content
+CREATE TABLE IF NOT EXISTS sc_legal_pages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  page_key text UNIQUE NOT NULL,
+  title text NOT NULL DEFAULT '',
+  content text NOT NULL DEFAULT '',
+  last_updated date DEFAULT CURRENT_DATE,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_legal_pages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public_read_legal" ON sc_legal_pages FOR SELECT TO public USING (true);
+CREATE POLICY "service_role_legal" ON sc_legal_pages FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 2. Company / store info
+CREATE TABLE IF NOT EXISTS sc_company_info (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_name text DEFAULT 'SHIELACOM CELL',
+  address text DEFAULT '',
+  city text DEFAULT '',
+  province text DEFAULT '',
+  postal_code text DEFAULT '',
+  whatsapp text DEFAULT '',
+  email text DEFAULT '',
+  operating_hours text DEFAULT 'Senin-Minggu: 08.00 - 22.00 WIB',
+  maps_url text DEFAULT '',
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE sc_company_info ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public_read_company" ON sc_company_info FOR SELECT TO public USING (true);
+CREATE POLICY "service_role_company" ON sc_company_info FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Seed legal pages
+INSERT INTO sc_legal_pages (page_key, title, content, last_updated) VALUES
+(
+  'refund_policy',
+  'Kebijakan Pengembalian Dana (Refund Policy)',
+  E'SHIELACOM CELL berkomitmen memberikan layanan terbaik kepada seluruh pelanggan. Dengan melakukan transaksi di website ini, pelanggan dianggap telah membaca dan menyetujui kebijakan berikut.\n\n## 1. TRANSAKSI BERHASIL\n\nSemua transaksi yang telah berhasil diproses dan dikirim ke provider tidak dapat dibatalkan maupun dikembalikan dananya.\n\n## 2. KESALAHAN INPUT PELANGGAN\n\nKesalahan pengisian nomor tujuan, ID pelanggan, nomor handphone, akun game, atau data lainnya yang dilakukan pelanggan bukan menjadi tanggung jawab SHIELACOM CELL dan dana tidak dapat dikembalikan.\n\n## 3. TRANSAKSI GAGAL\n\nApabila transaksi gagal dan status dari provider menyatakan gagal, maka saldo pelanggan akan dikembalikan secara otomatis ke saldo akun atau melalui mekanisme yang berlaku.\n\n## 4. DEPOSIT RESELLER\n\nDeposit reseller yang telah masuk dan diverifikasi admin akan masuk menjadi saldo akun reseller dan tidak dapat ditarik kembali menjadi uang tunai kecuali terdapat kesalahan sistem.\n\n## 5. KENDALA SISTEM\n\nApabila terjadi gangguan sistem, maintenance, atau kendala provider yang menyebabkan transaksi tertunda, pelanggan wajib menunggu proses pengecekan maksimal sesuai kebijakan yang berlaku.\n\n## 6. PENYELESAIAN SENGKETA\n\nSegala komplain dapat disampaikan melalui kontak customer service yang tersedia di website.',
+  CURRENT_DATE
+),
+(
+  'privacy_policy',
+  'Kebijakan Privasi',
+  E'SHIELACOM CELL menghargai dan melindungi privasi seluruh pengguna website.\n\n## 1. DATA YANG DIKUMPULKAN\n\nKami dapat mengumpulkan data seperti:\n- Nama pengguna\n- Nomor telepon\n- Alamat email\n- Riwayat transaksi\n- Data deposit\n- Informasi perangkat dan browser\n\n## 2. PENGGUNAAN DATA\n\nData digunakan untuk:\n- Memproses transaksi\n- Verifikasi akun\n- Memberikan layanan pelanggan\n- Meningkatkan kualitas layanan\n- Mencegah aktivitas penipuan\n\n## 3. KEAMANAN DATA\n\nKami berupaya menjaga keamanan data pengguna menggunakan sistem keamanan yang tersedia pada platform.\n\n## 4. PEMBAGIAN DATA\n\nKami tidak menjual data pengguna kepada pihak ketiga. Data hanya digunakan untuk kebutuhan operasional layanan.\n\n## 5. COOKIE\n\nWebsite dapat menggunakan cookie untuk meningkatkan pengalaman pengguna.\n\n## 6. PERUBAHAN KEBIJAKAN\n\nKebijakan privasi dapat diperbarui sewaktu-waktu tanpa pemberitahuan terlebih dahulu.',
+  CURRENT_DATE
+),
+(
+  'terms_conditions',
+  'Syarat dan Ketentuan',
+  E'Dengan menggunakan layanan SHIELACOM CELL, pengguna dianggap telah memahami dan menyetujui seluruh syarat berikut.\n\n## 1. AKUN\n\nPengguna bertanggung jawab atas keamanan akun masing-masing.\n\n## 2. TRANSAKSI\n\nSemua transaksi diproses secara otomatis berdasarkan data yang dimasukkan pengguna.\n\n## 3. HARGA\n\nHarga produk dapat berubah sewaktu-waktu mengikuti perubahan harga dari provider.\n\n## 4. LAYANAN\n\nKami berhak menambah, mengubah, atau menghentikan layanan tertentu tanpa pemberitahuan sebelumnya.\n\n## 5. PENYALAHGUNAAN\n\nSegala bentuk penyalahgunaan sistem dapat menyebabkan akun diblokir permanen.\n\n## 6. TANGGUNG JAWAB\n\nKami tidak bertanggung jawab atas kerugian yang timbul akibat kesalahan input data oleh pengguna.\n\n## 7. RESELLER\n\nReseller hanya dapat menggunakan fitur yang telah diberikan sistem. Reseller tidak memiliki akses ke pengaturan website, logo, banner, provider, payment gateway, pengaturan admin, API dan webhook.\n\n## 8. HAK ADMIN\n\nAdmin memiliki hak penuh untuk:\n- Menyetujui atau menolak deposit\n- Menonaktifkan akun yang melanggar aturan\n- Mengubah harga produk\n- Mengubah kebijakan layanan',
+  CURRENT_DATE
+)
+ON CONFLICT (page_key) DO NOTHING;
+
+-- Seed company info (1 row)
+INSERT INTO sc_company_info (business_name, address, city, province, postal_code, whatsapp, email, operating_hours)
+VALUES ('SHIELACOM CELL', '', '', '', '', '', '', 'Senin-Minggu: 08.00 - 22.00 WIB')
+ON CONFLICT DO NOTHING;

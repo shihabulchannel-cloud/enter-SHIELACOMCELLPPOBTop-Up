@@ -17,6 +17,7 @@ import PaymentGatewaySettings from '@/components/admin/PaymentGatewaySettings';
 import MarkupSettings from '@/components/admin/MarkupSettings';
 import ResellerPanel from '@/components/admin/ResellerPanel';
 import BankAccountSettings from '@/components/admin/BankAccountSettings';
+import LegalSettings from '@/components/admin/LegalSettings';
 import ContentPanel from '@/components/admin/ContentPanel';
 import ReportsPanel from '@/components/admin/ReportsPanel';
 import SystemPanel from '@/components/admin/SystemPanel';
@@ -34,7 +35,7 @@ type SectionKey =
   | 'products' | 'categories'
   | 'provider' | 'payment' | 'markup'
   | 'resellers' | 'deposits' | 'bank_accounts'
-  | 'testimonials' | 'articles' | 'faqs'
+  | 'testimonials' | 'articles' | 'faqs' | 'legal'
   | 'transactions' | 'reports'
   | 'health' | 'logs' | 'notifications';
 
@@ -90,6 +91,7 @@ function buildNav(unreadNotifs: number, pendingDeposits: number): NavGroup[] {
         { key: 'testimonials', label: 'Testimoni', icon: FileText },
         { key: 'articles', label: 'Artikel/Blog', icon: FileText },
         { key: 'faqs', label: 'FAQ', icon: FileText },
+        { key: 'legal', label: 'Halaman Legal', icon: FileText },
       ],
     },
     {
@@ -317,6 +319,7 @@ function SectionContent({ section, navigate: nav }: { section: SectionKey; navig
     case 'resellers': return <ResellerPanel />;
     case 'deposits': return <ResellerPanel />;
     case 'bank_accounts': return <div className="space-y-6"><h2 className="text-xl font-bold text-foreground">Pengaturan Rekening Bank</h2><BankAccountSettings /></div>;
+    case 'legal': return <LegalSettings />;
     case 'testimonials': return <ContentPanel defaultTab="testimonials" />;
     case 'articles': return <ContentPanel defaultTab="articles" />;
     case 'faqs': return <ContentPanel defaultTab="faqs" />;

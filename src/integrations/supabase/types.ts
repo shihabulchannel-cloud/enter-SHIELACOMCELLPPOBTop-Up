@@ -3169,6 +3169,48 @@ export type Database = {
         }
         Relationships: []
       }
+      sc_company_info: {
+        Row: {
+          address: string | null
+          business_name: string | null
+          city: string | null
+          email: string | null
+          id: string
+          maps_url: string | null
+          operating_hours: string | null
+          postal_code: string | null
+          province: string | null
+          updated_at: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          address?: string | null
+          business_name?: string | null
+          city?: string | null
+          email?: string | null
+          id?: string
+          maps_url?: string | null
+          operating_hours?: string | null
+          postal_code?: string | null
+          province?: string | null
+          updated_at?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          address?: string | null
+          business_name?: string | null
+          city?: string | null
+          email?: string | null
+          id?: string
+          maps_url?: string | null
+          operating_hours?: string | null
+          postal_code?: string | null
+          province?: string | null
+          updated_at?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
       sc_deposits: {
         Row: {
           amount: number
@@ -3245,6 +3287,33 @@ export type Database = {
           updated_at?: string | null
           username?: string | null
           webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      sc_legal_pages: {
+        Row: {
+          content: string
+          id: string
+          last_updated: string | null
+          page_key: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          content?: string
+          id?: string
+          last_updated?: string | null
+          page_key: string
+          title?: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          id?: string
+          last_updated?: string | null
+          page_key?: string
+          title?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
