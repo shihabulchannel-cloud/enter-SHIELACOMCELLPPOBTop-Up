@@ -75,7 +75,7 @@ Deno.serve(async (req: Request) => {
     log("=== SYNC PRODUK DIGIFLAZZ DIMULAI ===");
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // STEP 1: Baca config — filter by provider='digiflazz', limit 1 agar tidak error duplikat
+    // STEP 1: Baca config — filter by provider='digiflazz', limit 1
     log("STEP 1: Membaca konfigurasi Digiflazz dari database...");
     const { data: dfConfig, error: cfgErr } = await supabase
       .from("sc_digiflazz_config")
@@ -90,16 +90,16 @@ Deno.serve(async (req: Request) => {
       return respond({ success: false, error: cfgErr.message });
     }
     if (!dfConfig) {
-      log("ERROR: Konfigurasi Digiflazz tidak ditemukan di database.");
+      log("ERROR: Konfigurasi Digiflazz tidak ditemukan.");
       return respond({ success: false, error: "Konfigurasi Digiflazz tidak ditemukan. Isi dan simpan terlebih dahulu." });
     }
     if (!dfConfig.username || !dfConfig.api_key) {
       log(`ERROR: Username='${dfConfig.username}' atau API Key kosong`);
-      return respond({ success: false, error: "Username atau API Key Digiflazz belum diisi. Simpan konfigurasi terlebih dahulu." });
+      return respond({ success: false, error: "Username atau API Key Digiflazz belum diisi." });
     }
-    log(`OK: Konfigurasi ditemukan — username=${dfConfig.username}, api_key=***${String(dfConfig.api_key).slice(-4)}`);
+    log(`OK: username=${dfConfig.username}, api_key=***${String(dfConfig.api_key).slice(-4)}`);
 
-    // STEP 2: Buat signature MD5 resmi Digiflazz
+    // STEP 2: Signature MD5
     log("STEP 2: Membuat signature MD5(username + api_key + 'pricelist')...");
     const sign = md5(`${dfConfig.username}${dfConfig.api_key}pricelist`);
     log(`OK: sign=${sign}`);
@@ -120,25 +120,33 @@ Deno.serve(async (req: Request) => {
     }
 
     // STEP 4: Parse response
+    // PENTING: /v1/price-list tidak selalu mengembalikan field 'rc'
+    // Response sukses hanya berisi { "data": [...] }
+    // Response error berisi { "rc": "XX", "message": "..." }
     log("STEP 4: Parsing response Digiflazz...");
     const responseData = await res.json();
-    log(`RC=${responseData.rc}, message=${responseData.message || "-"}`);
+    const rc = responseData.rc;
+    const apiMsg = responseData.message || "-";
+    log(`Keys: ${Object.keys(responseData).join(", ")}`);
+    log(`RC=${rc ?? "tidak ada (normal untuk price-list)"}, message=${apiMsg}`);
 
-    if (responseData.rc !== "00") {
-      log(`ERROR: RC bukan 00 — kemungkinan API key atau signature salah`);
-      return respond({ success: false, error: `Digiflazz RC=${responseData.rc}: ${responseData.message || "Error tidak diketahui"}` });
-    }
-
+    // Cek jika data adalah array — ini tanda sukses
     if (!Array.isArray(responseData.data)) {
-      log("ERROR: Field 'data' bukan array");
-      return respond({ success: false, error: "Format response Digiflazz tidak valid (data bukan array)" });
+      // rc ada dan bukan "00" → error autentikasi
+      if (rc && rc !== "00") {
+        log(`ERROR: Digiflazz RC=${rc} — ${apiMsg}`);
+        return respond({ success: false, error: `Digiflazz error RC=${rc}: ${apiMsg}` });
+      }
+      // rc undefined dan data juga tidak ada → format tidak dikenal
+      log(`ERROR: response.data bukan array. Full: ${JSON.stringify(responseData).slice(0, 500)}`);
+      return respond({ success: false, error: `Response Digiflazz tidak valid: ${JSON.stringify(responseData).slice(0, 200)}` });
     }
 
     const products = responseData.data;
     log(`OK: Diterima ${products.length} produk dari Digiflazz`);
 
-    // STEP 5: Simpan ke database (batch 100)
-    log("STEP 5: Menyimpan produk ke database dalam batch 100...");
+    // STEP 5: Simpan ke database batch 100
+    log("STEP 5: Menyimpan ke database (batch 100)...");
     let synced = 0, skipped = 0;
     const dbErrors: string[] = [];
     const BATCH = 100;
@@ -161,13 +169,9 @@ Deno.serve(async (req: Request) => {
         }));
 
       skipped += chunk.length - rows.length;
-
       if (rows.length === 0) continue;
 
-      const { error: upsertErr } = await supabase
-        .from("sc_products")
-        .upsert(rows, { onConflict: "sku" });
-
+      const { error: upsertErr } = await supabase.from("sc_products").upsert(rows, { onConflict: "sku" });
       if (upsertErr) {
         log(`ERROR batch ${Math.floor(i / BATCH) + 1}: ${upsertErr.message}`);
         dbErrors.push(upsertErr.message);
@@ -175,16 +179,16 @@ Deno.serve(async (req: Request) => {
       } else {
         synced += rows.length;
         if ((Math.floor(i / BATCH) + 1) % 5 === 0 || i + BATCH >= products.length) {
-          log(`Batch ${Math.floor(i / BATCH) + 1}/${Math.ceil(products.length / BATCH)} — total tersimpan: ${synced}`);
+          log(`Batch ${Math.floor(i / BATCH) + 1}/${Math.ceil(products.length / BATCH)} — tersimpan: ${synced}`);
         }
       }
     }
 
-    log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati, ${dbErrors.length} batch error ===`);
+    log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati, ${dbErrors.length} error ===`);
     return respond({ success: true, synced, skipped, total: products.length, db_errors: dbErrors });
 
   } catch (err) {
-    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+    const msg = err instanceof Error ? `${err.message}` : String(err);
     log(`EXCEPTION: ${msg}`);
     return respond({ success: false, error: msg });
   }
