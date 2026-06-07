@@ -52,22 +52,27 @@ function makeInvoiceId(): string {
   return `RES-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
 }
 
+function respond(data: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
     const { reseller_id, product_sku, target, target_detail } = await req.json();
-    if (!reseller_id || !product_sku || !target) return new Response(JSON.stringify({ error: "reseller_id, product_sku, dan target wajib diisi" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!reseller_id || !product_sku || !target)
+      return respond({ error: "reseller_id, product_sku, dan target wajib diisi" }, 400);
 
     // 1. Load reseller
     const { data: reseller } = await supabase.from("sc_resellers").select("*").eq("id", reseller_id).maybeSingle();
-    if (!reseller) return new Response(JSON.stringify({ error: "Reseller tidak ditemukan" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    if (reseller.status === "suspended") return new Response(JSON.stringify({ error: "Akun Anda dibekukan" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!reseller) return respond({ error: "Reseller tidak ditemukan" }, 404);
+    if (reseller.status === "suspended") return respond({ error: "Akun Anda dibekukan" }, 403);
 
     // 2. Load product
     const { data: product } = await supabase.from("sc_products").select("*").eq("sku", product_sku).eq("active", true).maybeSingle();
-    if (!product) return new Response(JSON.stringify({ error: "Produk tidak tersedia" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!product) return respond({ error: "Produk tidak tersedia" }, 404);
 
     const productPrice = product.buy_price;
     const markup = reseller.markup || 0;
@@ -75,7 +80,7 @@ Deno.serve(async (req: Request) => {
 
     // 3. Check balance
     if (reseller.balance < productPrice) {
-      return new Response(JSON.stringify({ error: `Saldo tidak mencukupi. Saldo Anda: Rp${reseller.balance.toLocaleString()}, dibutuhkan: Rp${productPrice.toLocaleString()}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return respond({ error: `Saldo tidak mencukupi. Saldo Anda: Rp${reseller.balance.toLocaleString()}, dibutuhkan: Rp${productPrice.toLocaleString()}` }, 400);
     }
 
     // 4. Deduct balance
@@ -90,10 +95,11 @@ Deno.serve(async (req: Request) => {
       markup, sell_price: sellPrice, target, target_detail: target_detail || "",
       order_status: "processing",
     }).select().single();
+
     if (orderErr) {
       // Rollback balance
       await supabase.from("sc_resellers").update({ balance: reseller.balance }).eq("id", reseller_id);
-      return new Response(JSON.stringify({ error: orderErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return respond({ error: orderErr.message }, 500);
     }
 
     // 6. Add wallet mutation
@@ -103,42 +109,144 @@ Deno.serve(async (req: Request) => {
       description: `Pembelian ${product.name} → ${target}`, ref_id: invoiceId,
     });
 
-    // 7. Send to Digiflazz
-    const { data: dfConfig } = await supabase.from("sc_digiflazz_config").select("*").eq("provider", "digiflazz").order("updated_at", { ascending: false }).limit(1).maybeSingle();
-    if (dfConfig?.username && dfConfig?.api_key) {
-      const refId = `${invoiceId}-${Date.now()}`;
-      const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
-      try {
-        const res = await fetch("https://api.digiflazz.com/v1/transaction", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: dfConfig.username, buyer_sku_code: product.provider_code, customer_no: target, ref_id: refId, sign, testing: dfConfig.testing === true }),
-        });
-        const dfData = await res.json();
-        const dfStatus = dfData.data?.status;
-        const orderStatus = dfStatus === "Sukses" ? "success" : dfStatus === "Gagal" ? "failed" : "processing";
-        await supabase.from("sc_reseller_orders").update({
-          order_status: orderStatus, digiflazz_ref: refId,
-          digiflazz_sn: dfData.data?.sn || "", notes: dfData.data?.message || "", updated_at: new Date().toISOString(),
-        }).eq("id", order.id);
+    // 7. Load Digiflazz config
+    const { data: dfConfig } = await supabase.from("sc_digiflazz_config")
+      .select("*").eq("provider", "digiflazz").order("updated_at", { ascending: false }).limit(1).maybeSingle();
 
-        // If failed, refund balance
-        if (orderStatus === "failed") {
-          await supabase.from("sc_resellers").update({ balance: reseller.balance }).eq("id", reseller_id);
-          await supabase.from("sc_wallet_mutations").insert({
-            reseller_id, reseller_name: reseller.name, type: "refund",
-            amount: productPrice, balance_before: newBalance, balance_after: reseller.balance,
-            description: `Refund gagal: ${product.name}`, ref_id: invoiceId,
-          });
-        }
-        return new Response(JSON.stringify({ success: true, invoice_id: invoiceId, order_status: orderStatus, sn: dfData.data?.sn || "", new_balance: orderStatus === "failed" ? reseller.balance : newBalance }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      } catch (e) {
-        console.error("Digiflazz error:", e);
-      }
+    if (!dfConfig?.username || !dfConfig?.api_key) {
+      console.warn("Digiflazz config tidak lengkap — order tetap dibuat sebagai processing");
+      return respond({ success: true, invoice_id: invoiceId, order_status: "processing", new_balance: newBalance,
+        warning: "Konfigurasi Digiflazz belum diisi. Order dibuat tapi belum diproses." });
     }
 
-    return new Response(JSON.stringify({ success: true, invoice_id: invoiceId, order_status: "processing", new_balance: newBalance }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // 8. Send to Digiflazz with full logging
+    const refId = `${invoiceId}-${Date.now()}`;
+    const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
+    const isTesting = dfConfig.testing === true;
+
+    const requestPayload = {
+      username: dfConfig.username,
+      buyer_sku_code: product.provider_code,
+      customer_no: target,
+      ref_id: refId,
+      sign,
+      testing: isTesting,
+    };
+    const requestBody = JSON.stringify(requestPayload);
+
+    console.log(`[DIGIFLAZZ] Request: username=${dfConfig.username}, sku=${product.provider_code}, target=${target}, ref_id=${refId}, testing=${isTesting}`);
+    console.log(`[DIGIFLAZZ] Signature input: "${dfConfig.username}${dfConfig.api_key}${refId}" → ${sign}`);
+
+    let dfResponseText = "";
+    let dfData: Record<string, unknown> = {};
+    let httpStatus = 0;
+    let orderStatus = "processing";
+    let dfMessage = "";
+    let dfRc = "";
+    let dfSn = "";
+
+    try {
+      const res = await fetch("https://api.digiflazz.com/v1/transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody,
+      });
+      httpStatus = res.status;
+      dfResponseText = await res.text();
+      console.log(`[DIGIFLAZZ] HTTP Status: ${httpStatus}`);
+      console.log(`[DIGIFLAZZ] Response: ${dfResponseText}`);
+
+      try { dfData = JSON.parse(dfResponseText); } catch { /* not JSON */ }
+
+      // Parse Digiflazz response
+      const innerData = dfData.data as Record<string, unknown> | undefined;
+      const dfStatus = innerData?.status as string | undefined;
+      dfRc = String(innerData?.rc || dfData.rc || "");
+      dfMessage = String(innerData?.message || dfData.message || "");
+      dfSn = String(innerData?.sn || "");
+
+      console.log(`[DIGIFLAZZ] Parsed: status="${dfStatus}", rc="${dfRc}", message="${dfMessage}", sn="${dfSn}"`);
+
+      if (dfStatus === "Sukses") {
+        orderStatus = "success";
+      } else if (dfStatus === "Gagal") {
+        orderStatus = "failed";
+      } else if (!dfStatus && dfRc && dfRc !== "00") {
+        // Top-level error (not inside data object)
+        orderStatus = "failed";
+        dfMessage = dfMessage || `Digiflazz error RC=${dfRc}`;
+      }
+
+      // Save log to DB
+      await supabase.from("sc_digiflazz_logs").insert({
+        action: "transaction",
+        ref_id: refId, invoice_id: invoiceId,
+        request_body: requestBody,
+        response_body: dfResponseText,
+        http_status: httpStatus,
+        df_rc: dfRc, df_status: dfStatus || "",
+        df_message: dfMessage, df_sn: dfSn,
+        success: orderStatus === "success",
+      });
+
+      // Update order
+      await supabase.from("sc_reseller_orders").update({
+        order_status: orderStatus, digiflazz_ref: refId,
+        digiflazz_sn: dfSn, notes: dfMessage,
+        updated_at: new Date().toISOString(),
+      }).eq("id", order.id);
+
+      // If failed, refund balance
+      if (orderStatus === "failed") {
+        await supabase.from("sc_resellers").update({ balance: reseller.balance }).eq("id", reseller_id);
+        await supabase.from("sc_wallet_mutations").insert({
+          reseller_id, reseller_name: reseller.name, type: "refund",
+          amount: productPrice, balance_before: newBalance, balance_after: reseller.balance,
+          description: `Refund gagal: ${product.name} — ${dfMessage}`, ref_id: invoiceId,
+        });
+        return respond({
+          success: false,
+          error: `Transaksi gagal: ${dfMessage || 'Ditolak provider'}`,
+          digiflazz_rc: dfRc,
+          digiflazz_message: dfMessage,
+          invoice_id: invoiceId,
+          order_status: "failed",
+          new_balance: reseller.balance,
+        });
+      }
+
+      return respond({
+        success: true, invoice_id: invoiceId, order_status: orderStatus,
+        sn: dfSn, digiflazz_message: dfMessage, new_balance: newBalance,
+      });
+
+    } catch (fetchErr) {
+      const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.error(`[DIGIFLAZZ] Network error: ${errMsg}`);
+
+      // Log error
+      await supabase.from("sc_digiflazz_logs").insert({
+        action: "transaction", ref_id: refId, invoice_id: invoiceId,
+        request_body: requestBody, response_body: `NETWORK_ERROR: ${errMsg}`,
+        http_status: 0, df_rc: "NET_ERR", df_message: errMsg, success: false,
+      });
+
+      // Keep as processing (network might be temporary)
+      await supabase.from("sc_reseller_orders").update({
+        order_status: "processing", digiflazz_ref: refId,
+        notes: `Network error: ${errMsg}`, updated_at: new Date().toISOString(),
+      }).eq("id", order.id);
+
+      return respond({
+        success: true, invoice_id: invoiceId,
+        order_status: "processing", new_balance: newBalance,
+        warning: `Transaksi dikirim tapi response tidak diterima: ${errMsg}`,
+      });
+    }
+
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[reseller-order] Exception: ${msg}`);
+    return respond({ error: msg }, 500);
   }
 });

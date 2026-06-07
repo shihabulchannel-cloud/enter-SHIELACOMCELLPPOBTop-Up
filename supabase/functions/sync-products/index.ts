@@ -114,7 +114,6 @@ Deno.serve(async (req: Request) => {
 
     // Handle sukses: data adalah array langsung
     if (!Array.isArray(responseData.data)) {
-      // Error format baru: { "data": { "rc": "83", "message": "..." } }
       const innerData = responseData.data;
       if (innerData && typeof innerData === "object" && innerData.rc) {
         const iRc = String(innerData.rc);
@@ -123,7 +122,6 @@ Deno.serve(async (req: Request) => {
         if (iRc === "83") return respond({ success: false, error: `Rate limit Digiflazz: ${iMsg}. Tunggu beberapa menit lalu coba lagi.` });
         return respond({ success: false, error: `Digiflazz RC=${iRc}: ${iMsg}` });
       }
-      // Error format lama: { "rc": "XX", "message": "..." }
       if (rc && rc !== "00") return respond({ success: false, error: `Digiflazz RC=${rc}: ${apiMsg}` });
       log(`ERROR: data bukan array: ${JSON.stringify(responseData).slice(0, 300)}`);
       return respond({ success: false, error: `Format response tidak valid: ${JSON.stringify(responseData).slice(0, 150)}` });
@@ -169,6 +167,13 @@ Deno.serve(async (req: Request) => {
         }
       }
     }
+
+    // SAVE last_synced timestamp
+    const now = new Date().toISOString();
+    await supabase.from("sc_digiflazz_config").update({
+      last_synced: now,
+      updated_at: now,
+    }).eq("provider", "digiflazz");
 
     log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati ===`);
     return respond({ success: true, synced, skipped, total: products.length, db_errors: dbErrors });

@@ -1,0 +1,31 @@
+-- ============================================================
+-- DIGIFLAZZ AUDIT FIX: tambah kolom + tabel logging
+-- SAFE: hanya menambah, tidak mengubah yang sudah ada
+-- ============================================================
+
+-- Tambah kolom ke sc_digiflazz_config
+ALTER TABLE sc_digiflazz_config
+  ADD COLUMN IF NOT EXISTS testing boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS last_synced timestamptz,
+  ADD COLUMN IF NOT EXISTS last_balance bigint DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_balance_checked timestamptz;
+
+-- Tabel log Digiflazz (semua request/response tersimpan)
+CREATE TABLE IF NOT EXISTS sc_digiflazz_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  action text NOT NULL,          -- 'transaction', 'cek_saldo', 'price_list', 'webhook'
+  ref_id text DEFAULT '',
+  invoice_id text DEFAULT '',
+  request_body text DEFAULT '',
+  response_body text DEFAULT '',
+  http_status integer DEFAULT 0,
+  df_rc text DEFAULT '',
+  df_status text DEFAULT '',
+  df_message text DEFAULT '',
+  df_sn text DEFAULT '',
+  success boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sc_digiflazz_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "service_role_df_logs" ON sc_digiflazz_logs FOR ALL TO public USING (true) WITH CHECK (true);
