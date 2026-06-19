@@ -41,7 +41,9 @@ export default function Header() {
       <header
         className={cn(
           'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-          scrolled ? 'glass-dark shadow-md py-2' : 'bg-transparent py-3'
+          scrolled
+            ? 'glass-dark shadow-lg border-b border-white/10 py-2'
+            : 'bg-black/40 backdrop-blur-md border-b border-white/10 shadow-sm py-3'
         )}
       >
         <div className="container mx-auto px-4">

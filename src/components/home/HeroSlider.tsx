@@ -29,9 +29,12 @@ const THEME_CONFIG: Record<Banner['theme'], { gradient: string; badge: string; b
   },
 };
 
+const NOISE = "data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E";
+
 function SlideContent({ banner, active, settings }: { banner: Banner; active: boolean; settings: { whatsapp: string } }) {
   const theme = THEME_CONFIG[banner.theme];
   const waLink = banner.button2Link || `https://wa.me/${settings.whatsapp}`;
+  const hasImage = !!banner.imageDataUrl;
 
   return (
     <div
@@ -40,17 +43,26 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
         active ? 'opacity-100 scale-100' : 'opacity-0 scale-[1.02] pointer-events-none'
       )}
     >
-      {/* Background */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient}`} />
-      {/* BG Image */}
-      {banner.imageDataUrl && (
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-30"
-          style={{ backgroundImage: `url(${banner.imageDataUrl})` }}
-        />
+      {hasImage ? (
+        <>
+          {/* Image as primary background — full opacity */}
+          <div
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${banner.imageDataUrl})` }}
+          />
+          {/* Light dark overlay for text contrast */}
+          <div className="absolute inset-0 bg-black/38" />
+          {/* Directional gradient to enhance left text area */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/20 to-transparent" />
+        </>
+      ) : (
+        <>
+          {/* Gradient fallback when no image uploaded */}
+          <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient}`} />
+          {/* Noise texture */}
+          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: `url("${NOISE}")` }} />
+        </>
       )}
-      {/* Noise texture */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'200\' height=\'200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")' }} />
 
       <div className="relative z-10 h-full flex items-center">
         <div className="container mx-auto px-4">
@@ -60,10 +72,10 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
                 {banner.badge}
               </span>
             )}
-            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight mb-4 drop-shadow-md">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight mb-4 drop-shadow-lg">
               {banner.title}
             </h1>
-            <p className="text-white/80 text-sm sm:text-base md:text-lg mb-6 leading-relaxed max-w-lg">
+            <p className="text-white/85 text-sm sm:text-base md:text-lg mb-6 leading-relaxed max-w-lg drop-shadow">
               {banner.subtitle}
             </p>
             <div className="flex gap-3 flex-wrap">
@@ -91,7 +103,6 @@ export default function HeroSlider() {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStart = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const active = bannerStore.get().filter(b => b.active).sort((a, b) => a.order - b.order);
@@ -108,11 +119,12 @@ export default function HeroSlider() {
   const next = useCallback(() => setCurrent(c => (c + 1) % (banners.length || 1)), [banners.length]);
   const prev = useCallback(() => setCurrent(c => (c - 1 + banners.length) % (banners.length || 1)), [banners.length]);
 
+  // Autoplay every 5 seconds — pauses on hover
   useEffect(() => {
     if (banners.length <= 1 || paused) return;
-    timerRef.current = setInterval(next, 5000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [banners.length, paused, next]);
+    const id = setInterval(() => setCurrent(c => (c + 1) % banners.length), 5000);
+    return () => clearInterval(id);
+  }, [banners.length, paused]);
 
   const handleTouchStart = (e: React.TouchEvent) => { touchStart.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -140,22 +152,30 @@ export default function HeroSlider() {
       {/* Controls */}
       {banners.length > 1 && (
         <>
-          <button onClick={prev} className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-xl bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-all backdrop-blur-sm">
+          <button
+            onClick={prev}
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-xl bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/10 shadow-md"
+          >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <button onClick={next} className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-xl bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-all backdrop-blur-sm">
+          <button
+            onClick={next}
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-xl bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/10 shadow-md"
+          >
             <ChevronRight className="w-5 h-5" />
           </button>
 
-          {/* Dots */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-1.5">
+          {/* Progress dots */}
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-2 items-center">
             {banners.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setCurrent(i)}
                 className={cn(
-                  'transition-all duration-300 rounded-full',
-                  i === current ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/50 hover:bg-white/70'
+                  'transition-all duration-300 rounded-full shadow-md',
+                  i === current
+                    ? 'w-7 h-2.5 bg-white'
+                    : 'w-2.5 h-2.5 bg-white/45 hover:bg-white/70'
                 )}
               />
             ))}
