@@ -180,6 +180,22 @@ body,
   }
 }
 
+@keyframes floatX {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  33%       { transform: translateX(-5px) translateY(-4px); }
+  66%       { transform: translateX(5px) translateY(-7px); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50%       { opacity: 0.3;  transform: scale(1.06); }
+}
+
+@keyframes neonRing {
+  0%, 100% { opacity: 0.18; }
+  50%       { opacity: 0.45; }
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% center;
@@ -245,6 +261,22 @@ body,
 
   .animate-float {
     animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-float-slow {
+    animation: float 4.5s ease-in-out infinite;
+  }
+
+  .animate-float-x {
+    animation: floatX 5s ease-in-out infinite;
+  }
+
+  .animate-glow-pulse {
+    animation: glowPulse 2.5s ease-in-out infinite;
+  }
+
+  .animate-neon-ring {
+    animation: neonRing 2s ease-in-out infinite;
   }
 
   .animate-shimmer {

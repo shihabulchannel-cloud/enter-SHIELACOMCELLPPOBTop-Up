@@ -295,10 +295,10 @@ const D_CMS: CmsContent = {
 };
 
 const D_BANNERS: Banner[] = [
-  { id: '1', title: 'Top Up Game Favoritmu', subtitle: 'Mobile Legends, Free Fire, PUBG, Genshin Impact dan 200+ Game Lainnya. Proses Instan!', badge: 'Top Up Game', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', imageDataUrl: '', theme: 'game', active: true, order: 1 },
-  { id: '2', title: 'Pulsa & E-Wallet Terlengkap', subtitle: 'GoPay, OVO, DANA, ShopeePay, Pulsa Semua Operator. Harga Terjangkau!', badge: 'Pulsa & E-Wallet', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', imageDataUrl: '', theme: 'pulsa', active: true, order: 2 },
-  { id: '3', title: 'Token PLN & Tagihan PPOB', subtitle: 'Bayar tagihan PLN, PDAM, Internet, BPJS dan banyak lagi. Mudah & Cepat!', badge: 'PLN & PPOB', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', imageDataUrl: '', theme: 'pln', active: true, order: 3 },
-  { id: '4', title: 'Semua Layanan Digital di Satu Tempat', subtitle: 'SHIELACOM CELL - Platform Top Up & PPOB Terpercaya. Transaksi Aman & Cepat 24 Jam!', badge: 'Semua Layanan', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', imageDataUrl: '', theme: 'all', active: true, order: 4 },
+  { id: '1', title: 'Pulsa & E-Wallet Terlengkap', subtitle: 'GoPay, OVO, DANA, ShopeePay, Pulsa Semua Operator. Harga Murah, Proses Instan 24 Jam!', badge: 'Pulsa & E-Wallet', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', bannerLink: '', imageDataUrl: '', theme: 'pulsa', active: true, order: 1 },
+  { id: '2', title: 'Top Up Game Favoritmu', subtitle: 'Mobile Legends, Free Fire, PUBG dan 200+ Game Lainnya. Diamonds & UC Langsung Masuk!', badge: 'Top Up Game', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', bannerLink: '', imageDataUrl: '', theme: 'game', active: true, order: 2 },
+  { id: '3', title: 'Token PLN & Tagihan PPOB', subtitle: 'Bayar tagihan PLN, PDAM, Internet, BPJS dan lebih banyak lagi. Mudah, Cepat & Terpercaya!', badge: 'PLN & PPOB', button1Text: 'Beli Sekarang', button1Link: '/products', button2Text: 'Hubungi WhatsApp', button2Link: '', bannerLink: '', imageDataUrl: '', theme: 'pln', active: true, order: 3 },
+  { id: '4', title: 'Gabung Jadi Reseller & Raih Penghasilan', subtitle: 'Bergabunglah dengan 2.400+ reseller aktif. Komisi menarik, sistem mudah, dukungan penuh 24 jam!', badge: 'Program Reseller', button1Text: 'Daftar Sekarang', button1Link: '/reseller', button2Text: 'Hubungi WhatsApp', button2Link: '', bannerLink: '', imageDataUrl: '', theme: 'all', active: true, order: 4 },
 ];
 
 const D_CATEGORIES: Category[] = [
