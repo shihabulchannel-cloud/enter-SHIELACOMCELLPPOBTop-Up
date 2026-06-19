@@ -12,9 +12,11 @@ import { useNavigate } from 'react-router-dom';
 
 const STATUS_CONFIG = {
   waiting_payment: { label: 'Menunggu Pembayaran', icon: Clock, color: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
+  waiting_verification: { label: 'Menunggu Verifikasi', icon: Clock, color: 'bg-orange-500/10 text-orange-600 border-orange-500/30' },
   processing: { label: 'Diproses', icon: Loader2, color: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
   success: { label: 'Berhasil', icon: CheckCircle2, color: 'bg-green-500/10 text-green-600 border-green-500/30' },
   failed: { label: 'Gagal', icon: XCircle, color: 'bg-red-500/10 text-red-600 border-red-500/30' },
+  cancelled: { label: 'Ditolak', icon: XCircle, color: 'bg-red-500/10 text-red-600 border-red-500/30' },
 };
 
 export default function CekTransaksi() {
@@ -39,8 +41,13 @@ export default function CekTransaksi() {
     }
   };
 
-  const orderStatus = result?.order_status as keyof typeof STATUS_CONFIG | undefined;
-  const statusCfg = orderStatus ? STATUS_CONFIG[orderStatus] || STATUS_CONFIG.failed : null;
+  // Effective status: manual order with proof submitted but not yet verified = waiting_verification
+  const rawStatus = result?.order_status as string | undefined;
+  const effectiveStatus: keyof typeof STATUS_CONFIG | undefined =
+    rawStatus === 'waiting_payment' && result?.payment_proof_url
+      ? 'waiting_verification'
+      : (rawStatus as keyof typeof STATUS_CONFIG | undefined);
+  const statusCfg = effectiveStatus ? STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.failed : null;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -116,7 +123,7 @@ export default function CekTransaksi() {
                         const Icon = statusCfg.icon;
                         return (
                           <Badge className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-semibold text-sm', statusCfg.color)}>
-                            <Icon className={cn('w-4 h-4', result.order_status === 'processing' && 'animate-spin')} />
+                            <Icon className={cn('w-4 h-4', effectiveStatus === 'processing' && 'animate-spin')} />
                             {statusCfg.label}
                           </Badge>
                         );

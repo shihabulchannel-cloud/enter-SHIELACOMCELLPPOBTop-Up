@@ -10,7 +10,7 @@ import { checkOrder, type OrderStatus } from '@/lib/order-api';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 
-function StatusIcon({ status }: { status: string }) {
+function StatusIcon({ status, paymentStatus }: { status: string; paymentStatus?: string }) {
   if (status === 'success') return (
     <div className="relative">
       <div className="w-20 h-20 rounded-full bg-green-500/15 flex items-center justify-center mx-auto">
@@ -20,7 +20,7 @@ function StatusIcon({ status }: { status: string }) {
       </div>
     </div>
   );
-  if (status === 'failed' || status === 'expired') return (
+  if (status === 'failed' || status === 'cancelled' || status === 'expired' || paymentStatus === 'rejected') return (
     <div className="relative">
       <div className="w-20 h-20 rounded-full bg-red-500/15 flex items-center justify-center mx-auto">
         <div className="w-16 h-16 rounded-full bg-red-500/25 flex items-center justify-center">
@@ -55,7 +55,7 @@ export default function OrderStatusPage() {
       .finally(() => setLoading(false));
   }, [invoiceId, navigate]);
 
-  // Realtime for processing → success/failed
+  // Realtime for status changes
   useEffect(() => {
     if (!invoiceId) return;
     const channel = supabase
@@ -92,10 +92,14 @@ export default function OrderStatusPage() {
   if (!order) return null;
 
   const isSuccess = order.order_status === 'success';
-  const isFailed = order.order_status === 'failed' || order.payment_status === 'expired';
+  const isFailed = order.order_status === 'failed'
+    || order.order_status === 'cancelled'
+    || order.payment_status === 'expired'
+    || order.payment_status === 'rejected';
   const isProcessing = !isSuccess && !isFailed;
+  const isRejected = order.order_status === 'cancelled' || order.payment_status === 'rejected';
 
-  const waNumber = '6281234567890'; // Default, could be fetched from store
+  const waNumber = '6281234567890';
   const waMessage = isSuccess
     ? `Halo, saya baru saja berhasil melakukan pembelian ${order.product_name} dengan invoice ${order.invoice_id}. Terima kasih!`
     : `Halo, saya butuh bantuan dengan pesanan invoice ${order.invoice_id}.`;
@@ -112,15 +116,24 @@ export default function OrderStatusPage() {
             'bg-primary/5 border-primary/20'
           )}>
             <div className="mb-4">
-              <StatusIcon status={order.order_status} />
+              <StatusIcon status={order.order_status} paymentStatus={order.payment_status} />
             </div>
             <h1 className="text-xl font-black text-foreground mb-1">
-              {isSuccess ? 'Pembayaran Berhasil!' : isFailed ? 'Pembayaran Gagal' : 'Sedang Diproses'}
+              {isSuccess ? 'Pembayaran Berhasil!'
+                : isRejected ? 'Pembayaran Ditolak'
+                : isFailed ? 'Pembayaran Gagal'
+                : 'Sedang Diproses'}
             </h1>
             <p className={cn('text-sm', isSuccess ? 'text-green-600' : isFailed ? 'text-red-500' : 'text-muted-foreground')}>
-              {isSuccess ? `${order.product_name} berhasil dikirim` :
-               isFailed ? order.payment_status === 'expired' ? 'Waktu pembayaran telah habis' : 'Transaksi tidak berhasil diproses' :
-               'Pesanan sedang dalam antrian, mohon tunggu sebentar...'}
+              {isSuccess
+                ? `${order.product_name} berhasil dikirim`
+                : isRejected
+                ? (order.reject_reason || 'Bukti pembayaran ditolak oleh admin')
+                : order.payment_status === 'expired'
+                ? 'Waktu pembayaran telah habis'
+                : isFailed
+                ? 'Transaksi tidak berhasil diproses'
+                : 'Pesanan sedang dalam antrian, mohon tunggu sebentar...'}
             </p>
           </div>
 

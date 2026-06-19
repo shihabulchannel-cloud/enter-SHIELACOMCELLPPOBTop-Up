@@ -8,6 +8,7 @@ export interface PaymentMethod {
 }
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
+  { id: 'MANUAL', label: 'Transfer Bank / QRIS Manual', gateway: 'manual', fee: 0, group: 'Transfer Manual' },
   { id: 'QRIS', label: 'QRIS', gateway: 'tripay', fee: 0, group: 'QRIS' },
   { id: 'BRIVA', label: 'BRI Virtual Account', gateway: 'tripay', fee: 4000, group: 'Virtual Account' },
   { id: 'BCAVA', label: 'BCA Virtual Account', gateway: 'tripay', fee: 4000, group: 'Virtual Account' },
@@ -21,6 +22,7 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
 ];
 
 export const GROUP_COLORS: Record<string, string> = {
+  'Transfer Manual': 'from-green-600 to-teal-600',
   'QRIS': 'from-blue-500 to-blue-600',
   'Virtual Account': 'from-orange-500 to-orange-600',
   'E-Wallet': 'from-purple-500 to-purple-600',

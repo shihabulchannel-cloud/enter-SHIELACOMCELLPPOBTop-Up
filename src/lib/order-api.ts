@@ -54,6 +54,11 @@ export interface OrderStatus {
   order_status: string;
   digiflazz_sn: string;
   notes: string;
+  // manual payment fields
+  payment_proof_url: string;
+  reject_reason: string;
+  manual_payment_type: string;
+  digiflazz_sent: boolean;
   created_at: string;
   expired_at: string;
   updated_at: string;

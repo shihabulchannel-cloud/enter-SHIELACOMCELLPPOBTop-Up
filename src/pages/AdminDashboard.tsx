@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Globe, Image, Package, Tag, Zap, CreditCard, TrendingUp, Users,
   FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield, Loader2,
-  UserCog, KeyRound, CheckCircle2, AlertCircle, RefreshCw
+  UserCog, KeyRound, CheckCircle2, AlertCircle, RefreshCw, Banknote, ClipboardCheck
 } from 'lucide-react';
 import { isAdminLoggedIn, adminLogout, getAdminSession, changeAdminPassword } from '@/lib/admin-auth';
 import { notificationStore, logAction } from '@/lib/store';
@@ -21,6 +21,8 @@ import LegalSettings from '@/components/admin/LegalSettings';
 import ContentPanel from '@/components/admin/ContentPanel';
 import ReportsPanel from '@/components/admin/ReportsPanel';
 import SystemPanel from '@/components/admin/SystemPanel';
+import ManualPaymentSettings from '@/components/admin/ManualPaymentSettings';
+import PaymentVerification from '@/components/admin/PaymentVerification';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -34,6 +36,7 @@ type SectionKey =
   | 'website' | 'banners'
   | 'products' | 'categories'
   | 'provider' | 'payment' | 'markup'
+  | 'manual_config' | 'manual_payments'
   | 'resellers' | 'deposits' | 'bank_accounts'
   | 'testimonials' | 'articles' | 'faqs' | 'legal'
   | 'transactions' | 'reports'
@@ -51,7 +54,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-function buildNav(unreadNotifs: number, pendingDeposits: number): NavGroup[] {
+function buildNav(unreadNotifs: number, pendingDeposits: number, pendingManual: number): NavGroup[] {
   return [
     {
       group: 'Utama',
@@ -75,6 +78,13 @@ function buildNav(unreadNotifs: number, pendingDeposits: number): NavGroup[] {
         { key: 'provider', label: 'Provider (Digiflazz)', icon: Zap },
         { key: 'payment', label: 'Payment Gateway', icon: CreditCard },
         { key: 'markup', label: 'Markup Harga', icon: TrendingUp },
+      ],
+    },
+    {
+      group: 'Pembayaran Manual',
+      items: [
+        { key: 'manual_config', label: 'Pengaturan Manual', icon: Banknote },
+        { key: 'manual_payments', label: 'Verifikasi Pembayaran', icon: ClipboardCheck, badge: pendingManual || undefined },
       ],
     },
     {
@@ -406,6 +416,8 @@ function SectionContent({ section, navigate: nav }: { section: SectionKey; navig
     case 'provider': return <ProviderSettings defaultTab="digiflazz" />;
     case 'payment': return <PaymentGatewaySettings />;
     case 'markup': return <MarkupSettings />;
+    case 'manual_config': return <ManualPaymentSettings />;
+    case 'manual_payments': return <PaymentVerification />;
     case 'resellers': return <ResellerPanel />;
     case 'deposits': return <ResellerPanel />;
     case 'bank_accounts': return <div className="space-y-6"><h2 className="text-xl font-bold text-foreground">Pengaturan Rekening Bank</h2><BankAccountSettings /></div>;
@@ -431,6 +443,7 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [pendingDeposits, setPendingDeposits] = useState(0);
+  const [pendingManual, setPendingManual] = useState(0);
 
   useEffect(() => {
     if (!isAdminLoggedIn()) {
@@ -444,11 +457,15 @@ export default function AdminDashboard() {
 
   const refreshBadges = async () => {
     setUnreadNotifs(notificationStore.unread());
-    const { count } = await supabase.from('sc_deposits').select('id', { count: 'exact', head: true }).eq('status', 'pending');
-    setPendingDeposits(count || 0);
+    const [{ count: dep }, { count: manual }] = await Promise.all([
+      supabase.from('sc_deposits').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('sc_orders').select('id', { count: 'exact', head: true }).eq('payment_method', 'MANUAL').neq('payment_proof_url', '').eq('payment_status', 'pending'),
+    ]);
+    setPendingDeposits(dep || 0);
+    setPendingManual(manual || 0);
   };
 
-  const navGroups = buildNav(unreadNotifs, pendingDeposits);
+  const navGroups = buildNav(unreadNotifs, pendingDeposits, pendingManual);
 
   const handleNavigate = (key: SectionKey) => {
     setSection(key);

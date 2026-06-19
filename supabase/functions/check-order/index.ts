@@ -33,7 +33,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const isExpired = order.payment_status === "pending" && new Date(order.expired_at) < new Date();
-    if (isExpired && order.order_status === "waiting_payment") {
+    // Don't auto-expire manual orders that already have a proof submitted (awaiting admin review)
+    if (isExpired && order.order_status === "waiting_payment" && !order.payment_proof_url) {
       await supabase.from("sc_orders").update({ payment_status: "expired", order_status: "failed", updated_at: new Date().toISOString() }).eq("id", order.id);
       order.payment_status = "expired";
       order.order_status = "failed";
