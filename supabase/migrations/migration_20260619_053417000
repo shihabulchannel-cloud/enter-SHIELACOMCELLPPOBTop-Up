@@ -1,0 +1,1 @@
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_resellers, sc_digiflazz_logs;

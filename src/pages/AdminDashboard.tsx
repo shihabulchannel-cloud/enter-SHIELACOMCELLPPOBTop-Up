@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Globe, Image, Package, Tag, Zap, CreditCard, TrendingUp, Users,
   FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield, Loader2,
-  UserCog, KeyRound, CheckCircle2, AlertCircle
+  UserCog, KeyRound, CheckCircle2, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { isAdminLoggedIn, adminLogout, getAdminSession, changeAdminPassword } from '@/lib/admin-auth';
 import { notificationStore, logAction } from '@/lib/store';
@@ -113,84 +113,174 @@ function buildNav(unreadNotifs: number, pendingDeposits: number): NavGroup[] {
 }
 
 // ============================================================
-// TRANSACTIONS TABLE (real DB orders)
+// TRANSACTIONS TABLE — unified sc_orders + sc_reseller_orders + realtime
 // ============================================================
+interface UnifiedTx {
+  _key: string;
+  type: 'public' | 'reseller';
+  invoice_id: string;
+  product_name: string;
+  target: string;
+  target_detail?: string;
+  buyer_name: string;
+  amount: number;
+  payment_method?: string;
+  order_status: string;
+  digiflazz_sn?: string;
+  notes?: string;
+  created_at: string;
+}
+
 function TransactionsTable() {
-  const [orders, setOrders] = useState<Record<string, unknown>[]>([]);
+  const [rows, setRows] = useState<UnifiedTx[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  const loadAll = useCallback(async () => {
+    const [{ data: pub }, { data: res }] = await Promise.all([
+      supabase.from('sc_orders').select('id,invoice_id,product_name,target,target_detail,buyer_name,payment_amount,payment_method,order_status,digiflazz_sn,notes,created_at')
+        .order('created_at', { ascending: false }).limit(300),
+      supabase.from('sc_reseller_orders').select('id,invoice_id,product_name,target,reseller_name,product_price,order_status,digiflazz_sn,notes,created_at')
+        .order('created_at', { ascending: false }).limit(300),
+    ]);
+    const pubRows: UnifiedTx[] = (pub || []).map(o => ({
+      _key: `pub-${o.id}`, type: 'public',
+      invoice_id: o.invoice_id, product_name: o.product_name,
+      target: o.target, target_detail: o.target_detail,
+      buyer_name: o.buyer_name || '—',
+      amount: o.payment_amount || 0,
+      payment_method: o.payment_method,
+      order_status: o.order_status || 'waiting_payment',
+      digiflazz_sn: o.digiflazz_sn,
+      notes: o.notes,
+      created_at: o.created_at,
+    }));
+    const resRows: UnifiedTx[] = (res || []).map(o => ({
+      _key: `res-${o.id}`, type: 'reseller',
+      invoice_id: o.invoice_id, product_name: o.product_name,
+      target: o.target, buyer_name: o.reseller_name || '—',
+      amount: o.product_price || 0,
+      payment_method: 'Saldo Reseller',
+      order_status: o.order_status || 'processing',
+      digiflazz_sn: o.digiflazz_sn,
+      notes: o.notes,
+      created_at: o.created_at,
+    }));
+    const merged = [...pubRows, ...resRows].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setRows(merged);
+    setLoading(false);
+    setLastUpdate(new Date());
+  }, []);
 
   useEffect(() => {
-    supabase.from('sc_orders').select('*').order('created_at', { ascending: false }).limit(100)
-      .then(({ data }) => { setOrders(data || []); setLoading(false); });
-  }, []);
+    loadAll();
+    const channel = supabase.channel('transactions-table-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_orders' }, () => loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_reseller_orders' }, () => loadAll())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadAll]);
 
   const STATUS_CFG: Record<string, { label: string; cls: string }> = {
     waiting_payment: { label: 'Menunggu Bayar', cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
-    processing: { label: 'Diproses', cls: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
-    success: { label: 'Sukses', cls: 'bg-green-500/10 text-green-600 border-green-500/30' },
-    failed: { label: 'Gagal', cls: 'bg-red-500/10 text-red-500 border-red-500/30' },
+    pending:         { label: 'Pending',          cls: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' },
+    processing:      { label: 'Diproses',          cls: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
+    success:         { label: 'Sukses',            cls: 'bg-green-500/10 text-green-600 border-green-500/30' },
+    failed:          { label: 'Gagal',             cls: 'bg-red-500/10 text-red-500 border-red-500/30' },
   };
 
-  const filtered = filter === 'all' ? orders : orders.filter(o => o.order_status === filter);
+  const FILTER_OPTIONS = [
+    { value: 'all', label: 'Semua' },
+    { value: 'waiting_payment', label: 'Menunggu Bayar' },
+    { value: 'processing', label: 'Diproses' },
+    { value: 'success', label: 'Sukses' },
+    { value: 'failed', label: 'Gagal' },
+    { value: '__public', label: 'Pembeli Umum' },
+    { value: '__reseller', label: 'Reseller' },
+  ];
+
+  const filtered = rows.filter(o => {
+    if (filter === 'all') return true;
+    if (filter === '__public') return o.type === 'public';
+    if (filter === '__reseller') return o.type === 'reseller';
+    return o.order_status === filter;
+  });
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Riwayat Transaksi</h2>
-          <p className="text-muted-foreground text-sm">{orders.length} total order</p>
+          <h2 className="text-xl font-bold text-foreground">Semua Transaksi</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-muted-foreground text-sm">{rows.length} total (Publik + Reseller)</p>
+            <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              Realtime
+            </span>
+          </div>
+          {!loading && <p className="text-xs text-muted-foreground/60 mt-0.5">Update: {lastUpdate.toLocaleTimeString('id-ID')}</p>}
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {['all', 'waiting_payment', 'processing', 'success', 'failed'].map(s => (
-            <button key={s} onClick={() => setFilter(s)} className={cn('px-3 py-1.5 rounded-xl text-xs font-semibold transition-all', filter === s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-primary/10')}>
-              {s === 'all' ? 'Semua' : STATUS_CFG[s]?.label || s}
-            </button>
-          ))}
-        </div>
+        <button onClick={loadAll} className="p-2 rounded-xl hover:bg-muted" title="Refresh">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : <RefreshCw className="w-4 h-4 text-muted-foreground" />}
+        </button>
+      </div>
+      <div className="flex gap-2 flex-wrap mb-4">
+        {FILTER_OPTIONS.map(opt => (
+          <button key={opt.value} onClick={() => setFilter(opt.value)} className={cn('px-3 py-1.5 rounded-xl text-xs font-semibold transition-all', filter === opt.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-primary/10')}>
+            {opt.label}
+          </button>
+        ))}
       </div>
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" /> Memuat data...
+            <Loader2 className="w-5 h-5 animate-spin" /> Memuat transaksi...
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tipe</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Invoice</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Produk</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tujuan</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Pembeli</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Pembeli/Reseller</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Total</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Metode</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">SN / Keterangan</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Tanggal</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((o) => {
-                  const status = String(o.order_status || 'waiting_payment');
-                  const cfg = STATUS_CFG[status] || STATUS_CFG.waiting_payment;
+                  const cfg = STATUS_CFG[o.order_status] || STATUS_CFG.processing;
                   return (
-                    <tr key={String(o.id)} className="border-b border-border/30 last:border-0 hover:bg-muted/10 transition-colors">
-                      <td className="px-4 py-3 text-xs font-medium text-primary font-mono">{String(o.invoice_id || '')}</td>
-                      <td className="px-4 py-3 text-sm text-foreground max-w-[140px] truncate">{String(o.product_name || '')}</td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{String(o.target || '')}{o.target_detail ? ` (${o.target_detail})` : ''}</td>
-                      <td className="px-4 py-3 text-sm text-foreground">{String(o.buyer_name || '')}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-foreground text-right">Rp {Number(o.payment_amount || 0).toLocaleString('id-ID')}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{String(o.payment_method || '')}</td>
+                    <tr key={o._key} className="border-b border-border/30 last:border-0 hover:bg-muted/10 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className={cn('text-[10px] font-bold px-2 py-1 rounded-md', o.type === 'reseller' ? 'bg-purple-500/10 text-purple-600' : 'bg-blue-500/10 text-blue-600')}>
+                          {o.type === 'reseller' ? 'RESELLER' : 'PUBLIK'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-medium text-primary font-mono">{o.invoice_id}</td>
+                      <td className="px-4 py-3 text-sm text-foreground max-w-[130px] truncate">{o.product_name}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{o.target}{o.target_detail ? ` (${o.target_detail})` : ''}</td>
+                      <td className="px-4 py-3 text-sm text-foreground">{o.buyer_name}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-foreground text-right">Rp {o.amount.toLocaleString('id-ID')}</td>
                       <td className="px-4 py-3">
                         <span className={cn('text-xs font-semibold px-2 py-1 rounded-full border', cfg.cls)}>{cfg.label}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(String(o.created_at)).toLocaleString('id-ID')}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-[120px]">
+                        {o.digiflazz_sn ? <span className="text-green-600 font-mono">SN: {o.digiflazz_sn}</span> : o.notes ? <span className="truncate block">{o.notes}</span> : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(o.created_at).toLocaleString('id-ID')}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {filtered.length === 0 && <div className="text-center py-12 text-muted-foreground">Belum ada transaksi</div>}
+            {filtered.length === 0 && <div className="text-center py-12 text-muted-foreground">Tidak ada transaksi</div>}
           </div>
         )}
       </div>
@@ -356,7 +446,6 @@ export default function AdminDashboard() {
     setUnreadNotifs(notificationStore.unread());
     const { count } = await supabase.from('sc_deposits').select('id', { count: 'exact', head: true }).eq('status', 'pending');
     setPendingDeposits(count || 0);
-    setPendingRegs(0);
   };
 
   const navGroups = buildNav(unreadNotifs, pendingDeposits);

@@ -1,47 +1,92 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Wallet, ShoppingCart, ArrowDownToLine, TrendingUp, Package, ArrowLeftRight } from 'lucide-react';
+import { Wallet, ShoppingCart, ArrowDownToLine, TrendingUp, Package, ArrowLeftRight, RefreshCw } from 'lucide-react';
 import { getResellerSession, updateResellerBalance } from '@/lib/reseller-auth';
 import { supabase } from '@/integrations/supabase/client';
 import ResellerLayout from './Layout';
+import { cn } from '@/lib/utils';
 
 export default function ResellerDashboard() {
   const session = getResellerSession();
   const [balance, setBalance] = useState(session?.balance ?? 0);
   const [stats, setStats] = useState({ orders: 0, success: 0, failed: 0, totalDeposit: 0 });
   const [recentOrders, setRecentOrders] = useState<Record<string, unknown>[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  useEffect(() => {
-    if (!session) return;
-    const load = async () => {
-      const [{ data: orders }, { data: allOrders }, { data: deposits }, { data: reseller }] = await Promise.all([
-        supabase.from('sc_reseller_orders').select('*').eq('reseller_id', session.reseller_id).order('created_at', { ascending: false }).limit(5),
-        supabase.from('sc_reseller_orders').select('order_status').eq('reseller_id', session.reseller_id),
-        supabase.from('sc_deposits').select('amount').eq('reseller_id', session.reseller_id).eq('status', 'approved'),
-        supabase.from('sc_resellers').select('balance').eq('id', session.reseller_id).maybeSingle(),
-      ]);
-      setRecentOrders(orders || []);
-      const totalDeposit = (deposits || []).reduce((sum: number, d: Record<string, unknown>) => sum + (d.amount as number), 0);
-      const success = (allOrders || []).filter((o: Record<string, unknown>) => o.order_status === 'success').length;
-      const failed = (allOrders || []).filter((o: Record<string, unknown>) => o.order_status === 'failed').length;
-      setStats({ orders: (allOrders || []).length, success, failed, totalDeposit });
-      // Sync fresh balance from DB into session & local state
-      if (reseller && reseller.balance !== undefined) {
-        setBalance(reseller.balance);
-        updateResellerBalance(reseller.balance);
-      }
-    };
-    load();
+  const STATUS_COLOR: Record<string, string> = {
+    success: 'text-green-600 bg-green-500/10',
+    failed: 'text-red-500 bg-red-500/10',
+    processing: 'text-yellow-600 bg-yellow-500/10',
+  };
+  const STATUS_LABEL: Record<string, string> = {
+    success: 'Berhasil', failed: 'Gagal', processing: 'Diproses',
+  };
+
+  const load = useCallback(async () => {
+    if (!session?.reseller_id) return;
+    const [{ data: orders }, { data: allOrders }, { data: deposits }, { data: reseller }] = await Promise.all([
+      supabase.from('sc_reseller_orders').select('*').eq('reseller_id', session.reseller_id).order('created_at', { ascending: false }).limit(5),
+      supabase.from('sc_reseller_orders').select('order_status').eq('reseller_id', session.reseller_id),
+      supabase.from('sc_deposits').select('amount').eq('reseller_id', session.reseller_id).eq('status', 'approved'),
+      supabase.from('sc_resellers').select('balance').eq('id', session.reseller_id).maybeSingle(),
+    ]);
+    setRecentOrders(orders || []);
+    const totalDeposit = (deposits || []).reduce((sum: number, d: Record<string, unknown>) => sum + (d.amount as number), 0);
+    const success = (allOrders || []).filter((o: Record<string, unknown>) => o.order_status === 'success').length;
+    const failed = (allOrders || []).filter((o: Record<string, unknown>) => o.order_status === 'failed').length;
+    setStats({ orders: (allOrders || []).length, success, failed, totalDeposit });
+    if (reseller?.balance !== undefined) {
+      setBalance(reseller.balance);
+      updateResellerBalance(reseller.balance);
+    }
+    setLoading(false);
+    setLastUpdate(new Date());
   }, [session?.reseller_id]);
 
-  const STATUS_COLOR: Record<string, string> = { success: 'text-green-600 bg-green-500/10', failed: 'text-red-500 bg-red-500/10', processing: 'text-yellow-600 bg-yellow-500/10' };
-  const STATUS_LABEL: Record<string, string> = { success: 'Berhasil', failed: 'Gagal', processing: 'Diproses' };
+  useEffect(() => {
+    if (!session?.reseller_id) return;
+    load();
+
+    // Realtime: sc_reseller_orders untuk reseller ini
+    const channel = supabase.channel(`reseller-dashboard-${session.reseller_id}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'sc_reseller_orders',
+        filter: `reseller_id=eq.${session.reseller_id}`,
+      }, () => load())
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'sc_resellers',
+        filter: `id=eq.${session.reseller_id}`,
+      }, (payload) => {
+        const newBalance = (payload.new as Record<string, unknown>)?.balance as number | undefined;
+        if (newBalance !== undefined) {
+          setBalance(newBalance);
+          updateResellerBalance(newBalance);
+          load();
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.reseller_id]);
 
   return (
     <ResellerLayout>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Selamat datang, {session?.name}</p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">Selamat datang, {session?.name}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 text-xs font-medium text-green-600 bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            Realtime
+          </span>
+          <button onClick={load} className="p-2 rounded-xl hover:bg-muted transition-colors" title="Refresh">
+            <RefreshCw className={cn('w-4 h-4 text-muted-foreground', loading && 'animate-spin')} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -64,8 +109,13 @@ export default function ResellerDashboard() {
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2"><Package className="w-4 h-4 text-primary" /> Transaksi Terbaru</h2>
-            <Link to="/reseller/history" className="text-xs text-primary hover:underline">Lihat semua</Link>
+            <h2 className="font-bold text-foreground flex items-center gap-2">
+              <Package className="w-4 h-4 text-primary" /> Transaksi Terbaru
+            </h2>
+            <div className="flex items-center gap-2">
+              {!loading && <p className="text-xs text-muted-foreground/60">{lastUpdate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>}
+              <Link to="/reseller/history" className="text-xs text-primary hover:underline">Lihat semua</Link>
+            </div>
           </div>
           {recentOrders.length === 0 ? (
             <p className="text-muted-foreground text-sm text-center py-6">Belum ada transaksi</p>
@@ -79,7 +129,9 @@ export default function ResellerDashboard() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-foreground">Rp {(o.product_price as number).toLocaleString('id-ID')}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[o.order_status as string] || 'text-muted-foreground bg-muted'}`}>{STATUS_LABEL[o.order_status as string] || o.order_status as string}</span>
+                    <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', STATUS_COLOR[o.order_status as string] || 'text-muted-foreground bg-muted')}>
+                      {STATUS_LABEL[o.order_status as string] || String(o.order_status)}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -88,7 +140,9 @@ export default function ResellerDashboard() {
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-5">
-          <h2 className="font-bold text-foreground flex items-center gap-2 mb-4"><ArrowLeftRight className="w-4 h-4 text-primary" /> Menu Cepat</h2>
+          <h2 className="font-bold text-foreground flex items-center gap-2 mb-4">
+            <ArrowLeftRight className="w-4 h-4 text-primary" /> Menu Cepat
+          </h2>
           <div className="grid grid-cols-2 gap-3">
             {[
               { to: '/reseller/products', label: 'Beli Produk', icon: ShoppingCart, color: 'bg-primary/10 text-primary' },
