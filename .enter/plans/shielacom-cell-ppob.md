@@ -1,227 +1,175 @@
-# Plan: Manual Payment System (Fallback)
+# Plan: Premium Hero Slider Redesign
 
 ## Context
-Add a "Transfer Bank / QRIS Manual" payment option for public buyers as a fallback while payment gateways are not yet configured. Customer orders, uploads payment proof, admin verifies, then system automatically submits to Digiflazz. All existing features (Digiflazz, reseller, dashboard, products) are untouched.
+User wants a full premium redesign of HeroSlider with 2-column fintech layout (Stripe/Midtrans/Xendit level).
+Current slider: simple gradient + CMS text overlay.
+Goal: Add rich inline SVG illustrations for each theme, glassmorphism cards, particles, animations — without breaking any existing system.
+
+## Files to Change
+
+1. **`src/index.css`** — add keyframe animations
+2. **`src/components/home/HeroSlider.tsx`** — complete rewrite (2-col layout + SVG visuals per theme)
+3. **`src/lib/store.ts`** — add `bannerLink: ''` to all D_BANNERS defaults (TypeScript compatibility)
+
+BannerManager.tsx already has all required admin features — no changes needed there.
 
 ---
 
-## Root Cause / Existing Architecture
+## Strategy
 
-- `sc_orders` is the orders table; `order_status` and `payment_status` drive the flow
-- `Payment.tsx` → `/payment/:invoiceId` handles the payment waiting page
-- `create-order` edge function creates the order and optionally calls payment gateways
-- `sc_bank_accounts` table already exists (for reseller deposits) — reuse it
-- `ResellerDeposit.tsx` already shows the pattern for file upload (base64 via FileReader) — reuse
-- `BankAccountSettings.tsx` already exists — reuse in admin manual config panel
-- `payment-methods.ts` is the central list of payment methods
+### Behavior rules (unchanged)
+- Banner with `imageDataUrl` → fullscreen image, hide all CMS text, whole-banner clickable
+- Banner without image → 2-column premium design (NEW)
+- Autoplay 5s, prev/next, dots, swipe — unchanged
+
+### 2-Column layout (no image)
+```
+┌──────────────────────────────────┐
+│  Left 50%       │  Right 50%     │
+│  Badge          │  SVG Visual    │
+│  Title          │  (theme-based) │
+│  Subtitle       │                │
+│  CTA Buttons    │                │
+└──────────────────────────────────┘
+Mobile: stacks vertically, visual hidden on xs
+```
+
+### Slide Themes & Visuals
+
+**Slide 1 — pulsa (green):**
+- Gradient: `from-emerald-950 via-green-900 to-teal-950`
+- Visual: Phone mockup (SVG rect + rounded corners) + floating e-wallet icons (GoPay/DANA/OVO/ShopeePay as colored circles with letter) + glass "Transaksi Berhasil" card + floating green particles
+
+**Slide 2 — game (purple):**
+- Gradient: `from-purple-950 via-violet-900 to-indigo-950`
+- Visual: Gaming controller SVG + floating Diamond/Coin icons + ML/FF/PUBG glass cards + neon glow ring + sparkle particles
+
+**Slide 3 — pln (orange/amber):**
+- Gradient: `from-orange-950 via-amber-900 to-yellow-950`
+- Visual: Payment dashboard card (SVG) + floating utility icons (⚡PLN, 💧PDAM, WiFi, Shield/BPJS) + transaction list decoration
+
+**Slide 4 — all (blue-green):**
+- Gradient: `from-slate-950 via-teal-950 to-emerald-950`
+- Visual: Bar chart + line chart SVG + floating badges ("Komisi", "+30%") + network dots decoration
 
 ---
 
-## What Will Change
+## Animation Keyframes (index.css)
 
-| File | Change type |
-|---|---|
-| `supabase/migrations/migration_manual_pay` | NEW — add columns to sc_orders, new sc_manual_payment_config table |
-| `supabase/functions/process-manual-order/index.ts` | NEW — admin approve/reject with idempotency + Digiflazz submit |
-| `supabase/functions/submit-payment-proof/index.ts` | NEW — customer uploads proof (base64), updates order |
-| `src/lib/payment-methods.ts` | ADD — MANUAL method to list |
-| `src/lib/order-api.ts` | ADD — payment_proof_url to OrderStatus interface |
-| `src/pages/Payment.tsx` | ADD — manual payment section (QRIS + bank + upload proof) |
-| `src/pages/OrderStatus.tsx` | ADD — handle rejected/cancelled statuses |
-| `src/pages/CekTransaksi.tsx` | ADD — waiting_verification status display |
-| `src/components/admin/ManualPaymentSettings.tsx` | NEW — QRIS + bank config for admin |
-| `src/components/admin/PaymentVerification.tsx` | NEW — admin approve/reject payments |
-| `src/pages/AdminDashboard.tsx` | ADD — nav items + section routing for manual payment |
+```css
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes float-x {
+  0%, 100% { transform: translateX(0px) translateY(0px); }
+  33% { transform: translateX(-8px) translateY(-6px); }
+  66% { transform: translateX(8px) translateY(-10px); }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+@keyframes particle-drift {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(-80px) translateX(20px); opacity: 0; }
+}
+@keyframes slide-left {
+  from { opacity: 0; transform: translateX(-30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-right {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+```
 
-## What Will NOT Change
-- ProviderSettings, Digiflazz integration, reseller system, existing orders
-- All gateway payment methods (Tripay, Duitku, iPaymu)
-- ProductManager, CategoryManager, all content/legal pages
-- ResellerPanel, ResellerDashboard, Deposits
+Tailwind utility classes to apply:
+- `.animate-float` → `animation: float 3s ease-in-out infinite`
+- `.animate-float-slow` → `animation: float 4.5s ease-in-out infinite`
+- `.animate-float-x` → `animation: float-x 5s ease-in-out infinite`
+- `.animate-pulse-glow` → `animation: pulse-glow 2.5s ease-in-out infinite`
+- `.animate-slide-left` → `animation: slide-left 0.5s ease-out forwards`
+- `.animate-slide-right` → `animation: slide-right 0.5s ease-out forwards`
 
 ---
 
-## Database Migration (backward-compatible, additive only)
+## Component Architecture
 
-```sql
--- Add columns to sc_orders (safe, additive)
-ALTER TABLE sc_orders
-  ADD COLUMN IF NOT EXISTS payment_proof_url text DEFAULT '',
-  ADD COLUMN IF NOT EXISTS reject_reason text DEFAULT '',
-  ADD COLUMN IF NOT EXISTS manual_payment_type text DEFAULT '',
-  ADD COLUMN IF NOT EXISTS digiflazz_sent boolean NOT NULL DEFAULT false;
+```
+HeroSlider
+ ├── SlideContent (per banner)
+ │    ├── [hasImage] → fullscreen img + clickable overlay (unchanged)
+ │    └── [no image] → 2-col layout
+ │         ├── LeftCol: Badge + H1 + Subtitle + CTAs (animated slide-left)
+ │         └── RightCol: <ThemeVisual theme={banner.theme} /> (animated slide-right)
+ │
+ └── ThemeVisual (new component, same file)
+      ├── PulsaVisual (pulsa)
+      ├── GameVisual (game)
+      ├── PlnVisual (pln)
+      └── AllVisual (all)
+```
 
--- QRIS config table (one row)
-CREATE TABLE IF NOT EXISTS sc_manual_payment_config (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  qris_image_url text DEFAULT '',
-  qris_active boolean DEFAULT false,
-  default_method text DEFAULT 'bank',
-  updated_at timestamptz DEFAULT now()
-);
-ALTER TABLE sc_manual_payment_config ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "service_role_manual_cfg" ON sc_manual_payment_config FOR ALL TO public USING (true) WITH CHECK (true);
+All SVG visuals are inline TSX — zero external dependencies, lightweight.
 
--- sort_order for bank accounts
-ALTER TABLE sc_bank_accounts ADD COLUMN IF NOT EXISTS sort_order integer DEFAULT 0;
+### Glass Card component (reused across visuals):
+```tsx
+function GlassCard({ children, className }) {
+  return (
+    <div className={cn("backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl shadow-lg", className)}>
+      {children}
+    </div>
+  );
+}
+```
 
--- Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE sc_manual_payment_config;
-ALTER TABLE sc_manual_payment_config REPLICA IDENTITY FULL;
+### Particle component (scattered dots):
+```tsx
+function Particles({ color = 'bg-white', count = 8 }) {
+  // Hardcoded positions array (no random — SSR safe, no rerenders)
+  // Each particle: absolute positioned, different animation delays
+}
 ```
 
 ---
 
-## New Edge Function: `submit-payment-proof`
+## THEME_CONFIG update
 
-Input: `{ invoice_id, image_base64, image_type, manual_payment_type }`
-- Validate invoice exists and is MANUAL + payment_status = 'pending'
-- Validate base64 size < 7MB (≈ 5MB file)
-- Update sc_orders: payment_proof_url = image_base64, manual_payment_type
-- Return: { success: true }
-
----
-
-## New Edge Function: `process-manual-order`
-
-Input: `{ invoice_id, action: 'approve' | 'reject', reject_reason? }`
-
-**APPROVE flow:**
-1. Fetch order from sc_orders
-2. Validate: payment_status = 'pending', digiflazz_sent = false, payment_proof_url != ''
-3. Atomic idempotency lock: `UPDATE sc_orders SET digiflazz_sent = true WHERE invoice_id = $1 AND digiflazz_sent = false`
-4. If rows affected = 0 → return "sudah diproses"
-5. Update: payment_status = 'paid', order_status = 'processing'
-6. Load Digiflazz config from sc_digiflazz_config
-7. Load product from sc_products by sku
-8. Call Digiflazz /v1/transaction with proper MD5 signature
-9. Log to sc_digiflazz_logs
-10. Update order: order_status = normalizeStatus(df_status), digiflazz_sn, notes, digiflazz_ref
-11. Return result
-
-**REJECT flow:**
-1. Validate: payment_status = 'pending', digiflazz_sent = false
-2. Update: payment_status = 'rejected', order_status = 'cancelled', reject_reason
-3. Return success
-
----
-
-## Frontend: Payment.tsx (manual payment section)
-
-When `order.payment_method === 'MANUAL'` or `order.payment_gateway === 'manual'`:
-
-Show three sections:
-1. **Instruksi**: "Lakukan transfer ke rekening berikut atau scan QRIS"
-2. **QRIS** (if sc_manual_payment_config.qris_active = true): Show QRIS image with download button
-3. **Bank Accounts**: List from sc_bank_accounts (active=true) with copy buttons
-4. **Upload Bukti**: 
-   - File input (jpg/jpeg/png, max 5MB)
-   - Preview image
-   - Submit button → calls submit-payment-proof edge function
-   - After success: show "Bukti Terkirim — Menunggu Verifikasi Admin"
-
-Status progression in Payment.tsx:
-- `payment_proof_url = ''` → "Belum upload bukti"
-- `payment_proof_url != ''` AND `payment_status = 'pending'` → "Menunggu Verifikasi"
-- `payment_status = 'paid'` → redirect to OrderStatus
-
----
-
-## Frontend: OrderStatus.tsx additions
-
-Add handling for:
-- `payment_status === 'rejected'` → "Pembayaran Ditolak" (red) + show reject_reason
-- `order_status === 'cancelled'` → "Pesanan Dibatalkan"
-
----
-
-## Frontend: CekTransaksi.tsx additions
-
-Add to STATUS_CONFIG:
-```typescript
-waiting_verification: { label: 'Menunggu Verifikasi', icon: Clock, color: '...' }
-```
-Logic: if `order.payment_method === 'MANUAL'` AND `payment_proof_url` present AND status = waiting_payment → show "Menunggu Verifikasi"
-
----
-
-## Admin: ManualPaymentSettings.tsx (new)
-
-Tabs: **QRIS** | **Rekening Bank**
-
-QRIS tab:
-- Upload QR image (jpg/png, preview)
-- Toggle aktif/nonaktif
-- Simpan ke sc_manual_payment_config
-
-Rekening Bank tab:
-- Reuse/embed existing BankAccountSettings component (which reads sc_bank_accounts)
-- Note: this is the same table used for reseller deposits
-
----
-
-## Admin: PaymentVerification.tsx (new)
-
-- Query: `sc_orders WHERE payment_method = 'MANUAL' AND payment_proof_url != '' ORDER BY created_at DESC`
-- Group: Pending (payment_status='pending') | Selesai (paid/rejected)
-- Each card shows: invoice, buyer name, product, target, amount, waktu upload, proof image preview (thumbnail)
-- SETUJUI button → calls process-manual-order?action=approve (with loading + error)
-- TOLAK button → modal for reason input, then process-manual-order?action=reject
-- Realtime subscription to sc_orders (payment_method=MANUAL)
-- Badge on nav item showing pending count
-
----
-
-## AdminDashboard.tsx changes
-
-Add to nav group "Laporan" OR new group "Pembayaran Manual":
-```typescript
-{ key: 'manual_payments', label: 'Verifikasi Pembayaran', icon: ClipboardCheck, badge: pendingManualPayments }
-{ key: 'manual_config', label: 'Pengaturan Bayar Manual', icon: Settings2 }
-```
-
-Add to SectionContent router:
-```typescript
-case 'manual_payments': return <PaymentVerification />;
-case 'manual_config': return <ManualPaymentSettings />;
-```
-
-Add state variable `pendingManualPayments` to track count via DB query.
-
----
-
-## Payment Methods: payment-methods.ts
-
-Add:
-```typescript
-{ id: 'MANUAL', label: 'Transfer Bank / QRIS Manual', gateway: 'manual', fee: 0, group: 'Transfer Manual' }
-```
-
-GROUP_COLORS: `'Transfer Manual': 'from-teal-500 to-teal-600'`
-
----
-
-## order-api.ts: OrderStatus interface additions
+Current THEME_CONFIG only has gradient/badge/btnClass. 
+New version adds `bg` (full gradient string for `className`):
 
 ```typescript
-payment_proof_url: string;
-reject_reason: string;
-manual_payment_type: string;
-digiflazz_sent: boolean;
+const THEME_CONFIG = {
+  pulsa:  { bg: 'from-emerald-950 via-green-900 to-teal-950', badge: '...', btnClass: '...', particleColor: 'bg-emerald-400' },
+  game:   { bg: 'from-purple-950 via-violet-900 to-indigo-950', badge: '...', btnClass: '...', particleColor: 'bg-purple-400' },
+  pln:    { bg: 'from-orange-950 via-amber-900 to-yellow-950', badge: '...', btnClass: '...', particleColor: 'bg-amber-400' },
+  all:    { bg: 'from-slate-950 via-teal-950 to-emerald-950', badge: '...', btnClass: '...', particleColor: 'bg-teal-400' },
+};
 ```
 
 ---
 
-## Verification / Test Cases
+## store.ts change
 
-1. Customer selects "Transfer Manual" → creates order → redirected to /payment/:id
-2. Payment page shows QRIS + bank accounts (if configured)
-3. Customer uploads proof (jpg < 5MB) → proof saved → status shows "Menunggu Verifikasi"
-4. Customer refreshes → still shows "Menunggu Verifikasi" (realtime keeps status)
-5. Admin sees order in "Verifikasi Pembayaran" with proof preview
-6. Admin clicks SETUJUI → order sent to Digiflazz → status updates to processing/success/failed
-7. Admin clicks TOLAK → order cancelled with reason shown to customer
-8. Double-click SETUJUI → second call rejected (idempotency lock)
-9. Customer sees realtime update without refresh
-10. Mobile responsive layout verified
-11. Expired invoice (> 30 min): customer sees expired notice, cannot upload proof after expiry
+D_BANNERS: add `bannerLink: ''` to all 4 default banner objects so TypeScript is happy.
+
+Also update D_BANNERS to match better with new 4-slide plan:
+- Slide 1: theme `pulsa` — Pulsa & E-Wallet
+- Slide 2: theme `game` — Top Up Game
+- Slide 3: theme `pln` — PPOB (orange)
+- Slide 4: theme `all` — Reseller / All Services
+
+---
+
+## Verification
+
+After implementing:
+1. Build passes with 0 lint errors
+2. 4 default slides render with 2-column layout
+3. Banners with uploaded images still show fullscreen + clickable
+4. Admin BannerManager: add/edit/delete/reorder all still work
+5. Autoplay, prev/next buttons, swipe, dots all functional
+6. No changes to any backend/API/payment/database code
