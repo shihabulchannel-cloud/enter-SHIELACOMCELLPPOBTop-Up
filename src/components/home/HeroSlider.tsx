@@ -45,22 +45,15 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
     >
       {hasImage ? (
         <>
-          {/* Blurred background fill — covers letterbox areas on sides/top */}
+          {/* Banner image — fullscreen, no letterbox, no blur */}
           <div
-            className="absolute inset-0 bg-cover bg-center blur-2xl scale-110 opacity-70"
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: `url(${banner.imageDataUrl})` }}
           />
-          {/* Dark overlay on top of blurred bg */}
-          <div className="absolute inset-0 bg-black/55" />
-          {/* Main banner image — object-contain = no cropping, full image visible */}
-          <img
-            src={banner.imageDataUrl}
-            alt={banner.title}
-            className="absolute inset-0 w-full h-full object-contain z-[1]"
-            draggable={false}
-          />
-          {/* Subtle left gradient overlay for CMS text contrast */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/10 to-transparent z-[2]" />
+          {/* Minimal overlay — just enough for CMS text readability */}
+          <div className="absolute inset-0 bg-black/20" />
+          {/* Soft left-side gradient for CMS text area only */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent" />
         </>
       ) : (
         <>
