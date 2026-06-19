@@ -36,8 +36,8 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
   const waLink = banner.button2Link || `https://wa.me/${settings.whatsapp}`;
   const hasImage = !!banner.imageDataUrl;
 
-  // Determine click URL for whole-banner CTA
-  const clickUrl = banner.bannerLink || '';
+  // Determine click URL: bannerLink first, then button1Link as fallback
+  const clickUrl = banner.bannerLink || banner.button1Link || '';
   const isExternal = clickUrl.startsWith('http') || clickUrl.startsWith('//');
 
   return (
@@ -49,15 +49,17 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
     >
       {hasImage ? (
         <>
-          {/* Banner image — fullscreen hero, no text overlay */}
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: `url(${banner.imageDataUrl})` }}
+          {/* Dark background for letterbox areas (if any) */}
+          <div className="absolute inset-0 bg-[#0a0a0a]" />
+          {/* Banner image — object-contain so full image is always visible, no cropping */}
+          <img
+            src={banner.imageDataUrl}
+            alt={banner.title || 'Banner promo'}
+            className="absolute inset-0 w-full h-full object-contain"
+            draggable={false}
           />
-          {/* Hairline overlay just for depth — keep image as focus */}
-          <div className="absolute inset-0 bg-black/10" />
 
-          {/* Whole-banner clickable area (above image, below nav buttons z-20) */}
+          {/* Whole-banner clickable area (z-10 — below nav buttons at z-20) */}
           {clickUrl && (
             isExternal ? (
               <a
