@@ -66,6 +66,7 @@ export interface Banner {
   button1Link: string;
   button2Text: string;
   button2Link: string;
+  bannerLink: string;   // whole-banner click URL (used when image is present)
   imageDataUrl: string;
   theme: 'game' | 'pulsa' | 'pln' | 'all';
   active: boolean;

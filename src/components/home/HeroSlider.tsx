@@ -36,6 +36,10 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
   const waLink = banner.button2Link || `https://wa.me/${settings.whatsapp}`;
   const hasImage = !!banner.imageDataUrl;
 
+  // Determine click URL for whole-banner CTA
+  const clickUrl = banner.bannerLink || '';
+  const isExternal = clickUrl.startsWith('http') || clickUrl.startsWith('//');
+
   return (
     <div
       className={cn(
@@ -45,15 +49,32 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
     >
       {hasImage ? (
         <>
-          {/* Banner image — fullscreen, no letterbox, no blur */}
+          {/* Banner image — fullscreen hero, no text overlay */}
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: `url(${banner.imageDataUrl})` }}
           />
-          {/* Minimal overlay — just enough for CMS text readability */}
-          <div className="absolute inset-0 bg-black/20" />
-          {/* Soft left-side gradient for CMS text area only */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent" />
+          {/* Hairline overlay just for depth — keep image as focus */}
+          <div className="absolute inset-0 bg-black/10" />
+
+          {/* Whole-banner clickable area (above image, below nav buttons z-20) */}
+          {clickUrl && (
+            isExternal ? (
+              <a
+                href={clickUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute inset-0 z-10 cursor-pointer"
+                aria-label={banner.title || 'Lihat promo'}
+              />
+            ) : (
+              <Link
+                to={clickUrl}
+                className="absolute inset-0 z-10 cursor-pointer"
+                aria-label={banner.title || 'Lihat promo'}
+              />
+            )
+          )}
         </>
       ) : (
         <>
@@ -61,38 +82,39 @@ function SlideContent({ banner, active, settings }: { banner: Banner; active: bo
           <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient}`} />
           {/* Noise texture */}
           <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: `url("${NOISE}")` }} />
-        </>
-      )}
 
-      <div className="relative z-10 h-full flex items-center">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl">
-            {banner.badge && (
-              <span className={cn('inline-block text-xs font-bold px-3 py-1 rounded-full mb-4', theme.badge)}>
-                {banner.badge}
-              </span>
-            )}
-            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight mb-4 drop-shadow-lg">
-              {banner.title}
-            </h1>
-            <p className="text-white/85 text-sm sm:text-base md:text-lg mb-6 leading-relaxed max-w-lg drop-shadow">
-              {banner.subtitle}
-            </p>
-            <div className="flex gap-3 flex-wrap">
-              {banner.button1Text && (
-                <Button asChild className={cn('rounded-xl font-bold h-11 px-6', theme.btnClass)}>
-                  <Link to={banner.button1Link || '/products'}>{banner.button1Text}</Link>
-                </Button>
-              )}
-              {banner.button2Text && (
-                <Button asChild variant="outline" className="rounded-xl font-bold h-11 px-6 border-white/30 text-white bg-white/10 hover:bg-white/20">
-                  <a href={waLink} target="_blank" rel="noopener noreferrer">{banner.button2Text}</a>
-                </Button>
-              )}
+          {/* CMS text overlay — only shown when there is NO image */}
+          <div className="relative z-10 h-full flex items-center">
+            <div className="container mx-auto px-4">
+              <div className="max-w-2xl">
+                {banner.badge && (
+                  <span className={cn('inline-block text-xs font-bold px-3 py-1 rounded-full mb-4', theme.badge)}>
+                    {banner.badge}
+                  </span>
+                )}
+                <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight mb-4 drop-shadow-lg">
+                  {banner.title}
+                </h1>
+                <p className="text-white/85 text-sm sm:text-base md:text-lg mb-6 leading-relaxed max-w-lg drop-shadow">
+                  {banner.subtitle}
+                </p>
+                <div className="flex gap-3 flex-wrap">
+                  {banner.button1Text && (
+                    <Button asChild className={cn('rounded-xl font-bold h-11 px-6', theme.btnClass)}>
+                      <Link to={banner.button1Link || '/products'}>{banner.button1Text}</Link>
+                    </Button>
+                  )}
+                  {banner.button2Text && (
+                    <Button asChild variant="outline" className="rounded-xl font-bold h-11 px-6 border-white/30 text-white bg-white/10 hover:bg-white/20">
+                      <a href={waLink} target="_blank" rel="noopener noreferrer">{banner.button2Text}</a>
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

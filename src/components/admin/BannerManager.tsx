@@ -13,6 +13,7 @@ const EMPTY_FORM = (): Omit<Banner, 'id'> => ({
   title: '', subtitle: '', badge: '',
   button1Text: 'Beli Sekarang', button1Link: '/products',
   button2Text: 'Hubungi WhatsApp', button2Link: '',
+  bannerLink: '',
   imageDataUrl: '', theme: 'game', active: true, order: 0,
 });
 
@@ -63,6 +64,19 @@ function BannerForm({
             {imgError && <p className="text-red-500 text-xs mt-1">{imgError}</p>}
           </div>
         </div>
+      </div>
+      {/* Banner Link — whole-banner CTA when image is used */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Banner Link (opsional)</label>
+        <Input
+          value={form.bannerLink ?? ''}
+          onChange={e => f('bannerLink')(e.target.value)}
+          placeholder="https://wa.me/628xx atau /products"
+          className="rounded-xl"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Jika banner punya gambar, seluruh area banner akan mengarah ke URL ini saat diklik.
+        </p>
       </div>
       {/* Fields */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
