@@ -1,250 +1,187 @@
-# Rencana: Sistem Reseller Tunggal SHIELACOM CELL
+# Plan: Perbaikan Sistem Transaksi, Realtime Dashboard, dan Payment Gateway
 
 ## Context
-Sistem reseller lama menggunakan `localStorage` (tidak persisten, tidak aman).  
-Perlu dibangun ulang dengan database Supabase, auth terpisah dari admin, dan dashboard reseller lengkap.  
-**Tidak mengubah** konfigurasi Digiflazz, Payment Gateway, produk, transaksi, atau pengaturan website yang ada.
+
+Setelah audit lengkap, ditemukan 5 masalah utama:
+
+1. **Status transaksi stuck PENDING** — `reseller-order` & `payment-webhook` sudah benar mengirim ke Digiflazz, namun jika response awal "Pending", webhook Digiflazz yang seharusnya update status belum terintegrasi dengan baik. Status normalization juga tidak meng-handle semua varian teks.
+
+2. **AdminOverview menggunakan localStorage** — `AdminOverview` menggunakan `transactionStore.get()` yang adalah localStorage, bukan data DB asli. `TransactionsTable` fetch sekali tanpa subscription. Tidak ada realtime sama sekali.
+
+3. **Dashboard Reseller tidak realtime** — `ResellerDashboard` dan `ResellerHistory` fetch sekali on mount. Ketika status transaksi berubah di DB, UI tidak update kecuali user refresh manual.
+
+4. **Payment Gateway status dari localStorage** — `PaymentGatewaySettings` baca state dari `paymentGatewayStore` (localStorage), bukan dari DB. Saat halaman di-reload, status mungkin tidak sinkron dengan apa yang tersimpan di DB.
+
+5. **SystemPanel Logs hanya localStorage** — Logs ditampilkan dari `systemLogStore` (localStorage), bukan dari tabel `sc_digiflazz_logs` yang sudah ada di DB dari sesi sebelumnya.
 
 ---
 
-## Apa yang TIDAK DIUBAH
-- Tabel: `sc_digiflazz_config`, `sc_payment_configs`, `sc_orders`, `sc_products`, `sc_admin_accounts`
-- Edge functions: `create-order`, `check-order`, `payment-webhook`, `digiflazz-webhook`, `sync-products`
-- Admin pages: semua kecuali `ResellerPanel.tsx` (hanya dikerjakan ulang)
-- Banner, Logo, Footer, Produk, Transaksi, Pengaturan website
+## Files to Modify
+
+| File | Perubahan |
+|------|-----------|
+| `supabase/migrations/new` | Enable realtime pada tabel-tabel kritis |
+| `supabase/functions/payment-webhook/index.ts` | Perbaiki status normalization + logging ke sc_digiflazz_logs |
+| `src/components/admin/AdminOverview.tsx` | Ganti localStorage dengan DB + Supabase realtime subscription |
+| `src/pages/AdminDashboard.tsx` | Perbaiki TransactionsTable — unified view sc_orders + sc_reseller_orders + realtime |
+| `src/pages/reseller/Dashboard.tsx` | Tambah realtime subscription ke sc_reseller_orders + sc_resellers |
+| `src/pages/reseller/History.tsx` | Tambah realtime subscription ke sc_reseller_orders |
+| `src/components/admin/PaymentGatewaySettings.tsx` | Load dari DB on mount, status dari DB, test sebenarnya |
+| `src/components/admin/SystemPanel.tsx` | Tambah tab "Provider Logs" dari sc_digiflazz_logs |
 
 ---
 
-## Phase 1 — Database Migration (aman, additive only)
+## Files NOT to Touch (aman dari perubahan)
 
-### Tabel Baru
+- Semua halaman publik website (beranda, kontak, legal, footer)
+- Digiflazz config / ProviderSettings (sudah diperbaiki sesi sebelumnya)
+- reseller-auth, reseller-deposit edge functions
+- sync-products, digiflazz-webhook (sudah diperbaiki sesi sebelumnya)
+- create-order edge function
+- check-order edge function
+- Database tables yang sudah ada (tidak drop/reset)
+- Saldo reseller, produk, konfigurasi provider
+
+---
+
+## Langkah Implementasi
+
+### Step 1: Migration — Enable Realtime
+
 ```sql
--- 1. sc_resellers — akun reseller
-CREATE TABLE sc_resellers (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  username text UNIQUE NOT NULL,
-  password_hash text NOT NULL,
-  email text DEFAULT '',
-  whatsapp text DEFAULT '',
-  balance integer DEFAULT 0,
-  markup integer DEFAULT 0, -- markup global reseller (Rp)
-  status text DEFAULT 'active', -- active | suspended
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  last_login timestamptz
-);
-
--- 2. sc_bank_accounts — rekening admin untuk deposit
-CREATE TABLE sc_bank_accounts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  bank_name text NOT NULL,
-  account_number text NOT NULL,
-  account_name text NOT NULL,
-  active boolean DEFAULT true,
-  created_at timestamptz DEFAULT now()
-);
-
--- 3. sc_deposits — pengajuan top up saldo reseller
-CREATE TABLE sc_deposits (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
-  reseller_name text NOT NULL,
-  amount integer NOT NULL,
-  bank_target text DEFAULT '',
-  proof_image text DEFAULT '', -- base64 atau URL
-  status text DEFAULT 'pending', -- pending | approved | rejected
-  reject_reason text DEFAULT '',
-  notes text DEFAULT '',
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
--- 4. sc_wallet_mutations — mutasi saldo reseller
-CREATE TABLE sc_wallet_mutations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
-  reseller_name text NOT NULL,
-  type text NOT NULL, -- deposit | debit | transaction | refund | manual_add | manual_deduct
-  amount integer NOT NULL,
-  balance_before integer NOT NULL,
-  balance_after integer NOT NULL,
-  description text DEFAULT '',
-  ref_id text DEFAULT '', -- invoice_id atau deposit_id
-  created_at timestamptz DEFAULT now()
-);
-
--- 5. sc_support_tickets — tiket bantuan reseller
-CREATE TABLE sc_support_tickets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
-  reseller_name text NOT NULL,
-  subject text NOT NULL,
-  message text NOT NULL,
-  status text DEFAULT 'open', -- open | replied | closed
-  admin_reply text DEFAULT '',
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
--- 6. sc_reseller_orders — order dari reseller (berbeda dari sc_orders publik)
-CREATE TABLE sc_reseller_orders (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  reseller_id uuid REFERENCES sc_resellers(id) ON DELETE CASCADE,
-  reseller_name text NOT NULL,
-  product_sku text NOT NULL,
-  product_name text NOT NULL,
-  product_price integer NOT NULL, -- harga beli (buy_price dari sc_products)
-  markup integer NOT NULL DEFAULT 0,
-  sell_price integer NOT NULL, -- product_price + markup
-  target text NOT NULL,
-  target_detail text DEFAULT '',
-  order_status text DEFAULT 'processing', -- processing | success | failed
-  digiflazz_ref text DEFAULT '',
-  digiflazz_sn text DEFAULT '',
-  notes text DEFAULT '',
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_reseller_orders;
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_resellers;
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_deposits;
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_digiflazz_logs;
+-- sc_orders sudah di-enable sebelumnya
 ```
 
-### RLS Policies
-- Semua tabel reseller: service_role = ALL, public = NONE (auth via edge function)
-- `sc_bank_accounts`: public SELECT WHERE active=true (reseller bisa lihat rekening aktif)
+### Step 2: Fix payment-webhook edge function
 
----
+Tambahkan:
+- Status normalization yang robust: `Sukses/sukses/Success/completed/delivered → success`, `Gagal/gagal/failed/error/cancelled → failed`
+- Logging setiap Digiflazz request/response ke `sc_digiflazz_logs`
+- Handle kasus "Pending" dari Digiflazz dengan benar (keep as "processing", biarkan webhook update nanti)
 
-## Phase 2 — Edge Functions
+### Step 3: Fix AdminOverview — DB + Realtime
 
-### 1. `reseller-auth` (baru)
-Actions:
-- `register` → hash SHA-256, insert sc_resellers, return session token
-- `login` → verify hash, update last_login, return session token (24h expiry)
-- `change_password` → verify old hash, update to new hash
-
-Pattern identik dengan `admin-login` (Web Crypto API SHA-256 + base64 JSON token).
-
-### 2. `reseller-deposit` (baru)
-Actions:
-- `submit` → insert sc_deposits, status=pending (hanya reseller terautentikasi)
-- `approve` → admin action: update status=approved, tambah balance, insert sc_wallet_mutations
-- `reject` → admin action: update status=rejected + reject_reason
-- `list` → list deposit reseller atau semua (admin)
-
-### 3. `reseller-order` (baru)
-Actions:
-- `buy` → cek saldo cukup, kurangi saldo, insert sc_reseller_orders, kirim ke Digiflazz
-- Pattern sama seperti `payment-webhook` processDigiflazzOrder
-
----
-
-## Phase 3 — Reseller Auth Module (Frontend)
-
-### File Baru: `src/lib/reseller-auth.ts`
-- Identik dengan `admin-auth.ts` tapi key `shielacom_reseller_v1`
-- Interfaces: `ResellerSession { id, username, name, balance, markup, status, expires_at }`
-- Functions: `resellerLogin`, `resellerLogout`, `isResellerLoggedIn`, `getResellerSession`
-
-### File Baru: `src/components/reseller/ResellerRoute.tsx`
-- Protected route wrapper: jika tidak login → redirect ke `/reseller/login`
-
----
-
-## Phase 4 — Reseller Dashboard Pages
-
-### Struktur Route
-```
-/reseller/login        → Login reseller
-/reseller/register     → Daftar reseller  
-/reseller/dashboard    → Dashboard (protected)
-/reseller/products     → Beli produk (protected)
-/reseller/deposit      → Top up saldo (protected)
-/reseller/history      → Riwayat transaksi (protected)
-/reseller/mutations    → Mutasi saldo (protected)
-/reseller/profile      → Profil & ubah password (protected)
-/reseller/support      → Tiket bantuan (protected)
-```
-
-### File Baru: `src/pages/reseller/Layout.tsx`
-Sidebar/header reseller dengan menu 9 item (sesuai spec).  
-Tampilkan nama reseller + saldo di header.
-
-### Halaman (semua di `src/pages/reseller/`):
-- `Login.tsx` — form login, link ke register
-- `Register.tsx` — form daftar, redirect ke login setelah berhasil
-- `Dashboard.tsx` — stats card: saldo, total transaksi, total deposit, recent orders
-- `Products.tsx` — katalog produk dari `sc_products` dengan markup reseller, tombol Beli
-- `Deposit.tsx` — form nominal + pilih rekening admin + upload bukti (input file → FileReader base64)
-- `History.tsx` — list `sc_reseller_orders` milik reseller ini
-- `Mutations.tsx` — list `sc_wallet_mutations` milik reseller ini
-- `Profile.tsx` — info akun + form ganti password
-- `Support.tsx` — list tiket + form buat tiket baru
-
----
-
-## Phase 5 — Admin Updates
-
-### Update: `src/components/admin/ResellerPanel.tsx`
-Rebuild menggunakan database Supabase. Tab:
-- **Daftar Reseller**: baca `sc_resellers`, tombol kelola saldo (manual add/deduct via `reseller-deposit`), suspend/aktifkan, lihat markup, ubah markup
-- **Deposit**: baca `sc_deposits`, lihat bukti transfer (modal image), tombol Approve/Reject + alasan penolakan
-- **Mutasi**: baca `sc_wallet_mutations` dengan filter reseller
-- **Tiket**: baca `sc_support_tickets`, balas tiket
-
-### File Baru: `src/components/admin/BankAccountSettings.tsx`
-CRUD bank accounts dari `sc_bank_accounts`. Ditambahkan ke AdminDashboard sebagai section baru.
-
-### Update: `src/pages/AdminDashboard.tsx`
-- Tambah `'bank-accounts'` ke `SectionKey`
-- Tambah menu item "Rekening Deposit" di sidebar (group Reseller)
-- Render `<BankAccountSettings />` untuk section tersebut
-
----
-
-## Phase 6 — Marketing Page Update
-
-### Update: `src/pages/Reseller.tsx`
-- Hapus array `tiers` (Basic/Premium)
-- Ganti dengan satu card "Program Reseller SHIELACOM CELL"
-- Fitur: Beli produk digital, atur markup sendiri, dashboard reseller, riwayat transaksi
-- Tombol: "Daftar Sekarang" → `/reseller/register` | "Login Reseller" → `/reseller/login`
-
----
-
-## Phase 7 — Router Update
-
-### Update: `src/router.tsx`
-Tambah routes:
+Ganti `transactionStore.get()` dengan query nyata:
 ```typescript
-/reseller/login, /reseller/register (public)
-/reseller/dashboard, /reseller/products, /reseller/deposit,
-/reseller/history, /reseller/mutations, /reseller/profile, /reseller/support
-(semua wrapped ResellerRoute)
+// Fetch combined orders from both tables
+const [{ data: pubOrders }, { data: resOrders }] = await Promise.all([
+  supabase.from('sc_orders').select('*').order('created_at', { ascending: false }).limit(50),
+  supabase.from('sc_reseller_orders').select('*').order('created_at', { ascending: false }).limit(50),
+]);
+```
+
+Tambah realtime subscription:
+```typescript
+const channel = supabase.channel('admin-rt')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_orders' }, reload)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'sc_reseller_orders' }, reload)
+  .subscribe();
+// Cleanup on unmount: supabase.removeChannel(channel)
+```
+
+Hitung stats dari DB:
+- Hari ini (today's date filter)
+- Omset = sum(payment_amount) dari sc_orders + sum(product_price) dari sc_reseller_orders dengan status success
+- Pending count dari kedua tabel
+- Success/failed count
+
+### Step 4: Fix TransactionsTable in AdminDashboard
+
+- Gabungkan sc_orders + sc_reseller_orders dalam satu view (unified)
+- Tag setiap row sebagai "Publik" atau "Reseller"
+- Realtime subscription update tanpa refresh
+- Filter: semua, menunggu, proses, sukses, gagal
+- Tambah kolom "Tipe" (Publik/Reseller)
+
+### Step 5: Fix Reseller Dashboard Realtime
+
+Di `src/pages/reseller/Dashboard.tsx`:
+```typescript
+useEffect(() => {
+  // Initial load
+  load();
+  // Realtime subscription
+  const channel = supabase.channel(`reseller-${session.reseller_id}`)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'sc_reseller_orders',
+      filter: `reseller_id=eq.${session.reseller_id}`
+    }, () => load())
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'sc_resellers',
+      filter: `id=eq.${session.reseller_id}`
+    }, (payload) => {
+      const newBalance = payload.new?.balance;
+      if (newBalance !== undefined) {
+        setBalance(newBalance);
+        updateResellerBalance(newBalance);
+      }
+    })
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}, [session?.reseller_id]);
+```
+
+Di `src/pages/reseller/History.tsx` — tambah subscription serupa.
+
+### Step 6: Fix PaymentGatewaySettings — Load from DB
+
+```typescript
+// On mount, load from DB
+useEffect(() => {
+  supabase.from('sc_payment_configs').select('*')
+    .then(({ data }) => {
+      // Set state for each gateway from DB
+      data?.forEach(cfg => {
+        const json = cfg.config_json as Record<string, string>;
+        if (cfg.gateway === 'duitku') {
+          setDuitkuCfg({ merchantCode: json.merchant_code || '', apiKey: json.api_key || '', ..., enabled: cfg.active });
+        }
+        // etc. for tripay, ipaymu
+      });
+    });
+}, []);
+```
+
+Setelah save → re-read dari DB untuk confirm. Tampilkan badge status dari `cfg.active` DB, bukan localStorage.
+
+### Step 7: Fix SystemPanel — Provider Logs Tab
+
+Tambah tab ke-4: **"Provider Logs"** yang menampilkan `sc_digiflazz_logs`:
+- Load 50 log terbaru
+- Filter by action: transaction, cek_saldo, webhook, price_list
+- Expand untuk lihat request body + response body
+- Color code: success = hijau, failed = merah
+- Refresh button + realtime update
+
+---
+
+## Status Normalization (shared helper)
+
+Buat fungsi yang dipakai di payment-webhook dan bisa di-reference di frontend:
+
+```typescript
+function normalizeDigiflazzStatus(status: string | undefined): 'success' | 'failed' | 'processing' {
+  if (!status) return 'processing';
+  const s = status.toLowerCase().trim();
+  if (['sukses', 'success', 'completed', 'delivered'].includes(s)) return 'success';
+  if (['gagal', 'failed', 'error', 'cancelled', 'cancel'].includes(s)) return 'failed';
+  return 'processing';  // pending, process, waiting, etc
+}
 ```
 
 ---
 
-## Urutan Implementasi
-1. Database migration
-2. Edge functions (reseller-auth, reseller-deposit, reseller-order)
-3. `src/lib/reseller-auth.ts`
-4. `src/pages/reseller/` semua halaman + Layout
-5. `src/components/reseller/ResellerRoute.tsx`
-6. `src/components/admin/BankAccountSettings.tsx`
-7. Update `ResellerPanel.tsx`
-8. Update `AdminDashboard.tsx`
-9. Update `Reseller.tsx` (marketing)
-10. Update `router.tsx`
-11. Lint check
+## Verification
 
----
-
-## Verifikasi
-- [ ] Reseller bisa daftar, login, logout
-- [ ] Reseller bisa lihat produk dengan markup
-- [ ] Reseller bisa submit deposit + upload bukti
-- [ ] Admin bisa approve/reject deposit → saldo otomatis masuk
-- [ ] Reseller bisa beli produk → saldo berkurang otomatis
-- [ ] Mutasi saldo tercatat setiap transaksi
-- [ ] Admin tidak bisa diakses reseller (route protection)
-- [ ] Konfigurasi Digiflazz, Payment Gateway, Produk, Transaksi TIDAK berubah
+Setelah implementasi:
+1. Buka Admin → Dashboard → stats harus tampil dari DB, bukan 0
+2. Buat transaksi reseller → status berubah otomatis di dashboard reseller tanpa refresh
+3. Buka Admin → Transaksi → tampil gabungan sc_orders + sc_reseller_orders
+4. Perubahan status di DB → admin dashboard update < 2 detik
+5. Admin → Payment Gateway → simpan → status langsung aktif tanpa reload
+6. Admin → Sistem → Provider Logs → tampil log dari DB
+7. Reseller History → status update otomatis tanpa refresh
