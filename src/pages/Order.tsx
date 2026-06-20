@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import WhatsAppFloat from '@/components/layout/WhatsAppFloat';
-import PaymentMethodSelector, { PAYMENT_METHODS, type PaymentMethod } from '@/components/order/PaymentMethodSelector';
+import PaymentMethodSelector, { type PaymentMethod } from '@/components/order/PaymentMethodSelector';
 import { getProductBySku, createOrder } from '@/lib/order-api';
 import { cn } from '@/lib/utils';
 
