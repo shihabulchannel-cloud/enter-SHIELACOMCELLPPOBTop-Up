@@ -12,13 +12,21 @@ import { getProductBySku, createOrder } from '@/lib/order-api';
 import { cn } from '@/lib/utils';
 
 // Target field config per category
-const TARGET_CONFIG: Record<string, { label: string; placeholder: string; hint: string; hasDetail?: boolean; detailLabel?: string; detailPlaceholder?: string }> = {
+const TARGET_CONFIG: Record<string, { label: string; placeholder: string; hint: string; hasDetail?: boolean; detailLabel?: string; detailPlaceholder?: string; detailHint?: string }> = {
   pulsa: { label: 'Nomor HP', placeholder: '08xx-xxxx-xxxx', hint: 'Masukkan nomor HP tujuan pengisian pulsa' },
   data: { label: 'Nomor HP', placeholder: '08xx-xxxx-xxxx', hint: 'Masukkan nomor HP tujuan pengisian paket data' },
   ewallet: { label: 'Nomor HP / Akun', placeholder: '08xx-xxxx-xxxx', hint: 'Nomor HP yang terdaftar di e-wallet' },
   pln: { label: 'Nomor Meter / ID Pelanggan', placeholder: 'Contoh: 123456789012', hint: 'Masukkan nomor meter listrik atau ID pelanggan PLN (10-12 digit)' },
   ppob: { label: 'ID Pelanggan / Nomor Akun', placeholder: 'Masukkan ID pelanggan', hint: 'Nomor pelanggan atau ID akun layanan' },
-  game: { label: 'User ID', placeholder: 'Masukkan User ID', hint: 'User ID akun game Anda', hasDetail: true, detailLabel: 'Server ID (jika ada)', detailPlaceholder: 'Contoh: 2222 (kosongkan jika tidak ada)' },
+  game: {
+    label: 'User ID',
+    placeholder: 'Masukkan User ID game Anda',
+    hint: 'User ID akun game Anda',
+    hasDetail: true,
+    detailLabel: 'Zone ID',
+    detailPlaceholder: 'Contoh: 1234',
+    detailHint: 'Wajib diisi untuk Mobile Legends, Arena Breakout, PUBG Mobile, dan game lain yang membutuhkan Zone/Server ID. Kosongkan jika tidak diperlukan.',
+  },
 };
 
 type Step = 1 | 2 | 3;
@@ -201,6 +209,9 @@ export default function OrderPage() {
                     <div>
                       <label className="text-sm font-medium text-foreground block mb-1.5">{targetCfg.detailLabel}</label>
                       <Input value={targetDetail} onChange={e => setTargetDetail(e.target.value)} placeholder={targetCfg.detailPlaceholder} className="rounded-xl" />
+                      {targetCfg.detailHint && (
+                        <p className="text-xs text-muted-foreground mt-1">{targetCfg.detailHint}</p>
+                      )}
                     </div>
                   )}
                 </div>

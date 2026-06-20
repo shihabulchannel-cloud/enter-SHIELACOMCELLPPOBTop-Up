@@ -87,7 +87,7 @@ Deno.serve(async (req: Request) => {
     const newBalance = reseller.balance - productPrice;
     await supabase.from("sc_resellers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", reseller_id);
 
-    // 5. Create order record
+    // 5. Create order record (target_detail stored for games with Zone ID)
     const invoiceId = makeInvoiceId();
     const { data: order, error: orderErr } = await supabase.from("sc_reseller_orders").insert({
       reseller_id, reseller_name: reseller.name, invoice_id: invoiceId,
@@ -119,7 +119,14 @@ Deno.serve(async (req: Request) => {
         warning: "Konfigurasi Digiflazz belum diisi. Order dibuat tapi belum diproses." });
     }
 
-    // 8. Send to Digiflazz with full logging
+    // 8. Build customer_no per format Digiflazz:
+    //    - Semua produk non-game: customer_no = target (nomor HP / ID pelanggan)
+    //    - Game tanpa Zone ID  : customer_no = target (user_id)
+    //    - Game dengan Zone ID : customer_no = target(target_detail)
+    //      Contoh: Mobile Legends → 989386302(2222)
+    const td = (target_detail || "").trim();
+    const customerNo = td ? `${target}(${td})` : target;
+
     const refId = `${invoiceId}-${Date.now()}`;
     const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
     const isTesting = dfConfig.testing === true;
@@ -127,15 +134,16 @@ Deno.serve(async (req: Request) => {
     const requestPayload = {
       username: dfConfig.username,
       buyer_sku_code: product.provider_code,
-      customer_no: target,
+      customer_no: customerNo,
       ref_id: refId,
       sign,
       testing: isTesting,
     };
     const requestBody = JSON.stringify(requestPayload);
 
-    console.log(`[DIGIFLAZZ] Request: username=${dfConfig.username}, sku=${product.provider_code}, target=${target}, ref_id=${refId}, testing=${isTesting}`);
-    console.log(`[DIGIFLAZZ] Signature input: "${dfConfig.username}${dfConfig.api_key}${refId}" → ${sign}`);
+    console.log(`[DIGIFLAZZ] Request — invoice=${invoiceId}, sku=${product.provider_code}`);
+    console.log(`[DIGIFLAZZ]   target="${target}", target_detail="${td}", customer_no="${customerNo}"`);
+    console.log(`[DIGIFLAZZ]   ref_id=${refId}, testing=${isTesting}`);
 
     let dfResponseText = "";
     let dfData: Record<string, unknown> = {};
@@ -167,15 +175,17 @@ Deno.serve(async (req: Request) => {
 
       console.log(`[DIGIFLAZZ] Parsed: status="${dfStatus}", rc="${dfRc}", message="${dfMessage}", sn="${dfSn}"`);
 
+      // Status mapping: Sukses→success, Gagal→failed, Pending→processing (stays processing)
       if (dfStatus === "Sukses") {
         orderStatus = "success";
       } else if (dfStatus === "Gagal") {
         orderStatus = "failed";
       } else if (!dfStatus && dfRc && dfRc !== "00") {
-        // Top-level error (not inside data object)
+        // Top-level auth/config error (no inner data) → failed
         orderStatus = "failed";
         dfMessage = dfMessage || `Digiflazz error RC=${dfRc}`;
       }
+      // "Pending" or other unknown → stays "processing" (no refund yet)
 
       // Save log to DB
       await supabase.from("sc_digiflazz_logs").insert({
@@ -196,7 +206,7 @@ Deno.serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
       }).eq("id", order.id);
 
-      // If failed, refund balance
+      // If failed, refund balance (only on definitive failure, not Pending)
       if (orderStatus === "failed") {
         await supabase.from("sc_resellers").update({ balance: reseller.balance }).eq("id", reseller_id);
         await supabase.from("sc_wallet_mutations").insert({
@@ -231,7 +241,7 @@ Deno.serve(async (req: Request) => {
         http_status: 0, df_rc: "NET_ERR", df_message: errMsg, success: false,
       });
 
-      // Keep as processing (network might be temporary)
+      // Keep as processing (network error might be temporary)
       await supabase.from("sc_reseller_orders").update({
         order_status: "processing", digiflazz_ref: refId,
         notes: `Network error: ${errMsg}`, updated_at: new Date().toISOString(),

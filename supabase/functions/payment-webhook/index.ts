@@ -52,7 +52,7 @@ function normalizeDigiflazzStatus(status: string | undefined): "success" | "fail
   const s = status.toLowerCase().trim();
   if (["sukses", "success", "completed", "delivered", "berhasil", "paid"].includes(s)) return "success";
   if (["gagal", "failed", "error", "cancelled", "cancel", "reject", "rejected"].includes(s)) return "failed";
-  return "processing";
+  return "processing"; // "Pending" and unknown → stay as processing
 }
 
 // ─── Log to DB ───────────────────────────────────────────────────────────────
@@ -73,6 +73,19 @@ async function logToDb(
     df_status: data.df_status || "", df_message: data.df_message || "",
     df_sn: data.df_sn || "", success: data.success || false,
   });
+}
+
+// ─── Build customer_no from target + target_detail ──────────────────────────
+// Rules (Digiflazz):
+//   - Pulsa/Data/PLN/PPOB/E-Wallet: customer_no = target (nomor HP / ID pelanggan)
+//   - Game tanpa Zone ID          : customer_no = target (user_id saja)
+//   - Game dengan Zone ID         : customer_no = target(target_detail)
+//     Contoh: Mobile Legends → 989386302(2222)
+function buildCustomerNo(target: string, targetDetail: string | null | undefined): string {
+  const t = (target || "").trim();
+  const td = (targetDetail || "").trim();
+  if (td) return `${t}(${td})`;
+  return t;
 }
 
 // ─── Process Digiflazz transaction ─────────────────────────────────────────
@@ -96,6 +109,8 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     return;
   }
 
+  // Build customer_no — includes zone_id for games that need it
+  const customerNo = buildCustomerNo(order.target as string, order.target_detail as string);
   const refId = `${order.invoice_id}-${Date.now()}`;
   const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
   const isTesting = dfConfig.testing === true;
@@ -103,14 +118,16 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
   const requestPayload = {
     username: dfConfig.username,
     buyer_sku_code: product.provider_code,
-    customer_no: order.target as string,
+    customer_no: customerNo,
     ref_id: refId,
     sign,
     testing: isTesting,
   };
   const requestBody = JSON.stringify(requestPayload);
 
-  console.log(`[payment-webhook] Sending to Digiflazz: sku=${product.provider_code}, target=${order.target}, ref=${refId}`);
+  console.log(`[payment-webhook] Digiflazz request — invoice=${order.invoice_id}, sku=${product.provider_code}`);
+  console.log(`[payment-webhook]   target="${order.target}", target_detail="${order.target_detail}", customer_no="${customerNo}"`);
+  console.log(`[payment-webhook]   ref_id=${refId}, testing=${isTesting}`);
 
   let responseText = "";
   let httpStatus = 0;
@@ -137,10 +154,13 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     const rawStatus = String(inner?.status || "");
     dfStatus = normalizeDigiflazzStatus(rawStatus);
 
-    // If top-level error (no inner data), treat as failed
+    // Top-level error (no inner data object) → treat as failed
+    // Note: "Pending" status always comes inside the data object, so this won't affect Pending
     if (!inner && dfRc && dfRc !== "00") {
       dfStatus = "failed";
     }
+
+    console.log(`[payment-webhook] Parsed: status="${rawStatus}", normalized="${dfStatus}", rc="${dfRc}", message="${dfMessage}"`);
 
     // Log to DB
     await logToDb(supabase, "transaction", {
@@ -251,7 +271,7 @@ Deno.serve(async (req: Request) => {
         payment_status: "paid", order_status: "processing",
         updated_at: new Date().toISOString()
       }).eq("id", order.id);
-      // Fire & forget Digiflazz
+      // Fire & forget Digiflazz — passes full order row including target_detail
       processDigiflazzOrder(supabase, { ...order, payment_status: "paid" });
     } else {
       await supabase.from("sc_orders").update({
