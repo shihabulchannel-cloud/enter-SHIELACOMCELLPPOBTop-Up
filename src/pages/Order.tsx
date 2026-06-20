@@ -20,12 +20,12 @@ const TARGET_CONFIG: Record<string, { label: string; placeholder: string; hint: 
   ppob: { label: 'ID Pelanggan / Nomor Akun', placeholder: 'Masukkan ID pelanggan', hint: 'Nomor pelanggan atau ID akun layanan' },
   game: {
     label: 'User ID',
-    placeholder: 'Masukkan User ID game Anda',
-    hint: 'User ID akun game Anda',
+    placeholder: 'Contoh: 989386302',
+    hint: 'Masukkan User ID akun game Anda. Untuk game yang membutuhkan Zone ID (Mobile Legends, PUBG Mobile, dll), isi Zone ID di kolom bawah — akan digabung otomatis.',
     hasDetail: true,
-    detailLabel: 'Zone ID',
-    detailPlaceholder: 'Contoh: 1234',
-    detailHint: 'Wajib diisi untuk Mobile Legends, Arena Breakout, PUBG Mobile, dan game lain yang membutuhkan Zone/Server ID. Kosongkan jika tidak diperlukan.',
+    detailLabel: 'Zone ID (Opsional)',
+    detailPlaceholder: 'Contoh: 12939',
+    detailHint: 'Tidak wajib diisi. Isi hanya jika game Anda membutuhkan Zone/Server ID (Mobile Legends, PUBG Mobile, Arena Breakout, dll). Kosongkan jika tidak diperlukan.',
   },
 };
 

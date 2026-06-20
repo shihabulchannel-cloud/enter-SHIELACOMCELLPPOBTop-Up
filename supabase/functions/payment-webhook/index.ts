@@ -46,26 +46,15 @@ async function hmacSha256(key: string, message: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-// ─── Shared status normalizer ────────────────────────────────────────────────
 function normalizeDigiflazzStatus(status: string | undefined): "success" | "failed" | "processing" {
   if (!status) return "processing";
   const s = status.toLowerCase().trim();
   if (["sukses", "success", "completed", "delivered", "berhasil", "paid"].includes(s)) return "success";
   if (["gagal", "failed", "error", "cancelled", "cancel", "reject", "rejected"].includes(s)) return "failed";
-  return "processing"; // "Pending" and unknown → stay as processing
+  return "processing";
 }
 
-// ─── Log to DB ───────────────────────────────────────────────────────────────
-async function logToDb(
-  supabase: ReturnType<typeof createClient>,
-  action: string,
-  data: {
-    ref_id?: string; invoice_id?: string;
-    request_body?: string; response_body?: string;
-    http_status?: number; df_rc?: string; df_status?: string;
-    df_message?: string; df_sn?: string; success?: boolean;
-  }
-) {
+async function logToDb(supabase: ReturnType<typeof createClient>, action: string, data: { ref_id?: string; invoice_id?: string; request_body?: string; response_body?: string; http_status?: number; df_rc?: string; df_status?: string; df_message?: string; df_sn?: string; success?: boolean; }) {
   await supabase.from("sc_digiflazz_logs").insert({
     action, ref_id: data.ref_id || "", invoice_id: data.invoice_id || "",
     request_body: data.request_body || "", response_body: data.response_body || "",
@@ -75,18 +64,20 @@ async function logToDb(
   });
 }
 
-// ─── Build customer_no dari target + target_detail ───────────────────────────
-// - Pulsa/Data/PLN/PPOB/E-Wallet : customer_no = target
-// - Game tanpa Zone ID           : customer_no = userId
-// - Game dengan Zone ID          : customer_no = userId(zoneId) ← ML, PUBG, dll
+// ─── Build customer_no ────────────────────────────────────────────────────────
+// Format Digiflazz (BENAR):
+//   - Pulsa/Data/PLN/PPOB/E-Wallet : customer_no = target
+//   - Game tanpa Zone ID           : customer_no = userId
+//   - Game dengan Zone ID          : customer_no = userId + zoneId (TANPA separator)
+//     Contoh ML: userId=989386302, zoneId=12939 → 98938630212939
+//     BUKAN: 989386302(12939)
 function buildCustomerNo(target: string, targetDetail: string | null | undefined): string {
   const t = (target || "").trim();
   const td = (targetDetail || "").trim();
-  if (td) return `${t}(${td})`;
+  if (td) return `${t}${td}`; // concatenate langsung, TANPA kurung/spasi/separator
   return t;
 }
 
-// ─── Process Digiflazz transaction ─────────────────────────────────────────
 async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, order: Record<string, unknown>) {
   const { data: dfConfig } = await supabase
     .from("sc_digiflazz_config").select("*").eq("provider", "digiflazz")
@@ -107,7 +98,6 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     return;
   }
 
-  // Build customer_no — includes zone_id for games that need it
   const customerNo = buildCustomerNo(order.target as string, order.target_detail as string);
   const refId = `${order.invoice_id}-${Date.now()}`;
   const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
@@ -123,9 +113,15 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
   };
   const requestBody = JSON.stringify(requestPayload);
 
-  console.log(`[payment-webhook] Digiflazz request — invoice=${order.invoice_id}, sku=${product.provider_code}`);
-  console.log(`[payment-webhook]   target="${order.target}", target_detail="${order.target_detail}", customer_no="${customerNo}"`);
-  console.log(`[payment-webhook]   ref_id=${refId}, testing=${isTesting}`);
+  // Debug log — target, target_detail, customer_no_final, provider_code, invoice_id
+  console.log(`[payment-webhook] === DIGIFLAZZ REQUEST ===`);
+  console.log(`[payment-webhook]   invoice_id    = ${order.invoice_id}`);
+  console.log(`[payment-webhook]   provider_code = ${product.provider_code}`);
+  console.log(`[payment-webhook]   target        = ${order.target}`);
+  console.log(`[payment-webhook]   target_detail = ${order.target_detail}`);
+  console.log(`[payment-webhook]   customer_no   = ${customerNo}`);
+  console.log(`[payment-webhook]   ref_id        = ${refId}`);
+  console.log(`[payment-webhook]   testing       = ${isTesting}`);
 
   let responseText = "";
   let httpStatus = 0;
@@ -140,7 +136,7 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     });
     httpStatus = res.status;
     responseText = await res.text();
-    console.log(`[payment-webhook] Digiflazz response HTTP=${httpStatus}: ${responseText}`);
+    console.log(`[payment-webhook] Digiflazz HTTP=${httpStatus}: ${responseText}`);
 
     let parsed: Record<string, unknown> = {};
     try { parsed = JSON.parse(responseText); } catch { /* keep empty */ }
@@ -152,11 +148,9 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     const rawStatus = String(inner?.status || "");
     dfStatus = normalizeDigiflazzStatus(rawStatus);
 
-    if (!inner && dfRc && dfRc !== "00") {
-      dfStatus = "failed";
-    }
+    if (!inner && dfRc && dfRc !== "00") dfStatus = "failed";
 
-    console.log(`[payment-webhook] Parsed: status="${rawStatus}", normalized="${dfStatus}", rc="${dfRc}", message="${dfMessage}"`);
+    console.log(`[payment-webhook] Parsed: status="${rawStatus}", normalized="${dfStatus}", rc="${dfRc}", sn="${dfSn}"`);
 
     await logToDb(supabase, "transaction", {
       ref_id: refId, invoice_id: String(order.invoice_id || ""),
@@ -166,14 +160,9 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     });
 
     await supabase.from("sc_orders").update({
-      order_status: dfStatus,
-      digiflazz_ref: refId,
-      digiflazz_sn: dfSn,
-      notes: dfMessage,
-      updated_at: new Date().toISOString(),
+      order_status: dfStatus, digiflazz_ref: refId, digiflazz_sn: dfSn,
+      notes: dfMessage, updated_at: new Date().toISOString(),
     }).eq("id", order.id);
-
-    console.log(`[payment-webhook] Order ${order.invoice_id} → ${dfStatus} (rc=${dfRc})`);
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -190,14 +179,12 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
   }
 }
 
-// ─── CORS ────────────────────────────────────────────────────────────────────
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-callback-token, x-callback-signature",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// ─── MAIN ────────────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -216,8 +203,8 @@ Deno.serve(async (req: Request) => {
 
     await logToDb(supabase, "webhook", {
       invoice_id: String(payload.merchant_ref || payload.merchantOrderId || payload.reference_id || ""),
-      request_body: body, response_body: "",
-      http_status: 200, df_message: `Payment webhook from ${gateway}`, success: true,
+      request_body: body, response_body: "", http_status: 200,
+      df_message: `Payment webhook from ${gateway}`, success: true,
     });
 
     let invoiceId = "", isPaid = false;
@@ -245,36 +232,20 @@ Deno.serve(async (req: Request) => {
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
-    if (!invoiceId) {
-      console.warn("[payment-webhook] No invoice ID found in payload");
-      return new Response("OK", { status: 200, headers: corsHeaders });
-    }
+    if (!invoiceId) return new Response("OK", { status: 200, headers: corsHeaders });
 
     const { data: order } = await supabase.from("sc_orders").select("*").eq("invoice_id", invoiceId).maybeSingle();
-    if (!order) {
-      console.warn(`[payment-webhook] Order not found: ${invoiceId}`);
-      return new Response("OK", { status: 200, headers: corsHeaders });
-    }
-    if (order.payment_status === "paid" || order.payment_status === "expired") {
-      console.log(`[payment-webhook] Order ${invoiceId} already finalized: ${order.payment_status}`);
-      return new Response("OK", { status: 200, headers: corsHeaders });
-    }
+    if (!order) { console.warn(`[payment-webhook] Order not found: ${invoiceId}`); return new Response("OK", { status: 200, headers: corsHeaders }); }
+    if (order.payment_status === "paid" || order.payment_status === "expired") return new Response("OK", { status: 200, headers: corsHeaders });
 
     if (isPaid) {
-      await supabase.from("sc_orders").update({
-        payment_status: "paid", order_status: "processing",
-        updated_at: new Date().toISOString()
-      }).eq("id", order.id);
+      await supabase.from("sc_orders").update({ payment_status: "paid", order_status: "processing", updated_at: new Date().toISOString() }).eq("id", order.id);
       processDigiflazzOrder(supabase, { ...order, payment_status: "paid" });
     } else {
-      await supabase.from("sc_orders").update({
-        payment_status: "failed", order_status: "failed",
-        updated_at: new Date().toISOString()
-      }).eq("id", order.id);
+      await supabase.from("sc_orders").update({ payment_status: "failed", order_status: "failed", updated_at: new Date().toISOString() }).eq("id", order.id);
     }
 
     return new Response("OK", { status: 200, headers: corsHeaders });
-
   } catch (err) {
     console.error("[payment-webhook] Unhandled error:", err);
     return new Response("OK", { status: 200, headers: corsHeaders });

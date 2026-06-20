@@ -6,7 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// ─── MD5 (pure JS, untuk Digiflazz signature) ──────────────────────────────
 function md5(input: string): string {
   const str = unescape(encodeURIComponent(input));
   const x: number[] = [];
@@ -45,14 +44,16 @@ function md5(input: string): string {
   return hex(a)+hex(b)+hex(c)+hex(d);
 }
 
-// ─── Build customer_no dengan Zone ID untuk game ─────────────────────────────
-// - Non-game: customer_no = target
-// - Game tanpa Zone ID: customer_no = userId
-// - Game dengan Zone ID: customer_no = userId(zoneId) ← Mobile Legends, PUBG, dll
+// Build customer_no (BENAR):
+//   - Pulsa/Data/PLN/PPOB/E-Wallet: customer_no = target
+//   - Game tanpa Zone ID          : customer_no = userId
+//   - Game dengan Zone ID         : customer_no = userId + zoneId (TANPA separator)
+//     Contoh ML: userId=989386302, zoneId=12939 → 98938630212939
+//     BUKAN: 989386302(12939)
 function buildCustomerNo(target: string, targetDetail: string | null | undefined): string {
   const t = (target || "").trim();
   const td = (targetDetail || "").trim();
-  if (td) return `${t}(${td})`;
+  if (td) return `${t}${td}`; // concatenate langsung, TANPA kurung/spasi/separator
   return t;
 }
 
@@ -91,11 +92,9 @@ Deno.serve(async (req: Request) => {
     if (!order) return respond({ error: "Order tidak ditemukan" }, 404);
     if (order.payment_method !== "MANUAL") return respond({ error: "Order ini bukan pembayaran manual" }, 400);
 
-    // ── REJECT ──
     if (action === "reject") {
       await supabase.from("sc_orders").update({
-        payment_status: "rejected",
-        order_status: "cancelled",
+        payment_status: "rejected", order_status: "cancelled",
         reject_reason: reject_reason || "Bukti pembayaran tidak valid",
         updated_at: new Date().toISOString(),
       }).eq("id", order.id);
@@ -103,14 +102,12 @@ Deno.serve(async (req: Request) => {
       return respond({ success: true, message: "Pembayaran ditolak" });
     }
 
-    // ── APPROVE ──
     if (order.payment_status === "paid") {
       return respond({ error: "Pembayaran sudah disetujui sebelumnya" }, 400);
     }
 
     await supabase.from("sc_orders").update({
-      payment_status: "paid",
-      order_status: "processing",
+      payment_status: "paid", order_status: "processing",
       updated_at: new Date().toISOString(),
     }).eq("id", order.id);
 
@@ -119,7 +116,6 @@ Deno.serve(async (req: Request) => {
       .order("updated_at", { ascending: false }).limit(1).maybeSingle();
 
     if (!dfConfig?.username || !dfConfig?.api_key) {
-      console.warn("[process-manual-order] Digiflazz config missing");
       return respond({ success: true, message: "Pembayaran disetujui. Proses Digiflazz manual." });
     }
 
@@ -127,11 +123,9 @@ Deno.serve(async (req: Request) => {
       .from("sc_products").select("*").eq("sku", order.product_sku).maybeSingle();
 
     if (!product) {
-      console.warn("[process-manual-order] Product not found:", order.product_sku);
       return respond({ success: true, message: "Pembayaran disetujui. Produk tidak ditemukan — proses manual." });
     }
 
-    // Build customer_no — kirim Zone ID untuk game (Mobile Legends, PUBG, dll)
     const customerNo = buildCustomerNo(order.target as string, order.target_detail as string);
     const refId = `${order.invoice_id}-${Date.now()}`;
     const sign = md5(`${dfConfig.username}${dfConfig.api_key}${refId}`);
@@ -147,9 +141,15 @@ Deno.serve(async (req: Request) => {
     };
     const requestBody = JSON.stringify(requestPayload);
 
-    console.log(`[process-manual-order] Digiflazz request — invoice=${invoice_id}, sku=${product.provider_code}`);
-    console.log(`[process-manual-order]   target="${order.target}", target_detail="${order.target_detail}", customer_no="${customerNo}"`);
-    console.log(`[process-manual-order]   ref_id=${refId}, testing=${isTesting}`);
+    // Debug log
+    console.log(`[process-manual-order] === DIGIFLAZZ REQUEST ===`);
+    console.log(`[process-manual-order]   invoice_id    = ${invoice_id}`);
+    console.log(`[process-manual-order]   provider_code = ${product.provider_code}`);
+    console.log(`[process-manual-order]   target        = ${order.target}`);
+    console.log(`[process-manual-order]   target_detail = ${order.target_detail}`);
+    console.log(`[process-manual-order]   customer_no   = ${customerNo}`);
+    console.log(`[process-manual-order]   ref_id        = ${refId}`);
+    console.log(`[process-manual-order]   testing       = ${isTesting}`);
 
     let responseText = "";
     let httpStatus = 0;
@@ -175,10 +175,9 @@ Deno.serve(async (req: Request) => {
       dfSn = String(inner?.sn || "");
       const rawStatus = String(inner?.status || "");
       dfStatus = normalizeDigiflazzStatus(rawStatus);
-
       if (!inner && dfRc && dfRc !== "00") dfStatus = "failed";
 
-      console.log(`[process-manual-order] Parsed: status="${rawStatus}", normalized="${dfStatus}", rc="${dfRc}", message="${dfMessage}"`);
+      console.log(`[process-manual-order] Parsed: status="${rawStatus}", normalized="${dfStatus}", rc="${dfRc}", sn="${dfSn}"`);
 
     } catch (fetchErr) {
       const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
@@ -186,7 +185,6 @@ Deno.serve(async (req: Request) => {
       dfMessage = `Network error: ${errMsg}`;
     }
 
-    // Log
     await supabase.from("sc_digiflazz_logs").insert({
       action: "transaction", ref_id: refId, invoice_id: String(invoice_id),
       request_body: requestBody, response_body: responseText,
@@ -195,22 +193,14 @@ Deno.serve(async (req: Request) => {
       df_message: dfMessage, df_sn: dfSn, success: dfStatus === "success",
     }).catch(() => {});
 
-    // Update order
     await supabase.from("sc_orders").update({
-      order_status: dfStatus,
-      digiflazz_ref: refId,
-      digiflazz_sn: dfSn,
-      notes: dfMessage,
-      updated_at: new Date().toISOString(),
+      order_status: dfStatus, digiflazz_ref: refId, digiflazz_sn: dfSn,
+      notes: dfMessage, updated_at: new Date().toISOString(),
     }).eq("id", order.id);
 
     return respond({
       success: true,
-      message: dfStatus === "success"
-        ? `Transaksi berhasil! SN: ${dfSn}`
-        : dfStatus === "failed"
-          ? `Transaksi gagal: ${dfMessage}`
-          : `Pembayaran disetujui. Transaksi sedang diproses.`,
+      message: dfStatus === "success" ? `Transaksi berhasil! SN: ${dfSn}` : dfStatus === "failed" ? `Transaksi gagal: ${dfMessage}` : `Pembayaran disetujui. Transaksi sedang diproses.`,
       order_status: dfStatus,
       digiflazz_message: dfMessage,
     });
