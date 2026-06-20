@@ -422,8 +422,8 @@ export const markupStore = makeStore<MarkupRule[]>('sc_markup', D_MARKUP, 'marku
 
 // Banner store with CRUD
 export const bannerStore = {
-  get: (): Banner[] => get('sc_banners', D_BANNERS),
-  set: (v: Banner[]) => { set('sc_banners', v); notifyUpdate('banners'); },
+  get: (): Banner[] => get('sc_banners_v2', D_BANNERS),
+  set: (v: Banner[]) => { set('sc_banners_v2', v); notifyUpdate('banners'); },
   add: (b: Omit<Banner, 'id'>) => {
     const all = bannerStore.get();
     const n = { ...b, id: uid() };
