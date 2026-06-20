@@ -75,12 +75,10 @@ async function logToDb(
   });
 }
 
-// ─── Build customer_no from target + target_detail ──────────────────────────
-// Rules (Digiflazz):
-//   - Pulsa/Data/PLN/PPOB/E-Wallet: customer_no = target (nomor HP / ID pelanggan)
-//   - Game tanpa Zone ID          : customer_no = target (user_id saja)
-//   - Game dengan Zone ID         : customer_no = target(target_detail)
-//     Contoh: Mobile Legends → 989386302(2222)
+// ─── Build customer_no dari target + target_detail ───────────────────────────
+// - Pulsa/Data/PLN/PPOB/E-Wallet : customer_no = target
+// - Game tanpa Zone ID           : customer_no = userId
+// - Game dengan Zone ID          : customer_no = userId(zoneId) ← ML, PUBG, dll
 function buildCustomerNo(target: string, targetDetail: string | null | undefined): string {
   const t = (target || "").trim();
   const td = (targetDetail || "").trim();
@@ -154,15 +152,12 @@ async function processDigiflazzOrder(supabase: ReturnType<typeof createClient>, 
     const rawStatus = String(inner?.status || "");
     dfStatus = normalizeDigiflazzStatus(rawStatus);
 
-    // Top-level error (no inner data object) → treat as failed
-    // Note: "Pending" status always comes inside the data object, so this won't affect Pending
     if (!inner && dfRc && dfRc !== "00") {
       dfStatus = "failed";
     }
 
     console.log(`[payment-webhook] Parsed: status="${rawStatus}", normalized="${dfStatus}", rc="${dfRc}", message="${dfMessage}"`);
 
-    // Log to DB
     await logToDb(supabase, "transaction", {
       ref_id: refId, invoice_id: String(order.invoice_id || ""),
       request_body: requestBody, response_body: responseText,
@@ -219,7 +214,6 @@ Deno.serve(async (req: Request) => {
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
-    // Log the incoming webhook
     await logToDb(supabase, "webhook", {
       invoice_id: String(payload.merchant_ref || payload.merchantOrderId || payload.reference_id || ""),
       request_body: body, response_body: "",
@@ -271,7 +265,6 @@ Deno.serve(async (req: Request) => {
         payment_status: "paid", order_status: "processing",
         updated_at: new Date().toISOString()
       }).eq("id", order.id);
-      // Fire & forget Digiflazz — passes full order row including target_detail
       processDigiflazzOrder(supabase, { ...order, payment_status: "paid" });
     } else {
       await supabase.from("sc_orders").update({
