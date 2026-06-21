@@ -1,0 +1,64 @@
+
+-- =====================================================
+-- SECURITY HARDENING MIGRATION — SHIELACOM CELL
+-- =====================================================
+
+-- 1. Tabel rate limiting login attempts
+CREATE TABLE IF NOT EXISTS sc_login_attempts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  identifier text NOT NULL,
+  attempt_type text NOT NULL,
+  success boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sc_login_attempts_lookup ON sc_login_attempts (identifier, attempt_type, created_at DESC);
+ALTER TABLE sc_login_attempts ENABLE ROW LEVEL SECURITY;
+
+-- 2. Tabel audit log
+CREATE TABLE IF NOT EXISTS sc_audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_type text NOT NULL,
+  actor_id text DEFAULT '',
+  actor_name text DEFAULT '',
+  action text NOT NULL,
+  details jsonb DEFAULT '{}',
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sc_audit_logs_actor ON sc_audit_logs (actor_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS sc_audit_logs_action ON sc_audit_logs (action, created_at DESC);
+ALTER TABLE sc_audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- 3. Kolom password_version untuk migrasi bertahap SHA-256 → PBKDF2
+ALTER TABLE sc_admin_accounts ADD COLUMN IF NOT EXISTS password_version text DEFAULT 'sha256';
+ALTER TABLE sc_resellers ADD COLUMN IF NOT EXISTS password_version text DEFAULT 'sha256';
+
+-- 4. RLS: service_role bypass saja untuk login_attempts (tulis via edge function)
+CREATE POLICY "anon_read_audit_logs" ON sc_audit_logs FOR SELECT TO anon USING (true);
+
+-- =====================================================
+-- RLS CRITICAL FIXES
+-- =====================================================
+
+-- FIX: Hapus policy UPDATE orders untuk public (KRITIS - siapapun bisa update order!)
+DROP POLICY IF EXISTS "service_role_update_orders" ON sc_orders;
+
+-- FIX: sc_wallet_mutations — hanya SELECT untuk public, write via service_role (edge function)
+DROP POLICY IF EXISTS "service_role_mutations" ON sc_wallet_mutations;
+CREATE POLICY "anon_read_mutations" ON sc_wallet_mutations FOR SELECT TO anon USING (true);
+
+-- FIX: sc_reseller_orders — hanya SELECT untuk public
+DROP POLICY IF EXISTS "service_role_reseller_orders" ON sc_reseller_orders;
+CREATE POLICY "anon_read_reseller_orders" ON sc_reseller_orders FOR SELECT TO anon USING (true);
+
+-- FIX: sc_deposits — hanya SELECT untuk public (submit via reseller-deposit edge function)
+DROP POLICY IF EXISTS "service_role_deposits" ON sc_deposits;
+CREATE POLICY "anon_read_deposits" ON sc_deposits FOR SELECT TO anon USING (true);
+
+-- FIX: sc_resellers — hanya SELECT untuk public (write via reseller-auth/reseller-deposit edge function)
+DROP POLICY IF EXISTS "service_role_resellers" ON sc_resellers;
+CREATE POLICY "anon_read_resellers" ON sc_resellers FOR SELECT TO anon USING (true);
+
+-- FIX: sc_support_tickets — SELECT + INSERT untuk public (reseller submit langsung dari frontend)
+DROP POLICY IF EXISTS "service_role_tickets" ON sc_support_tickets;
+CREATE POLICY "anon_read_tickets" ON sc_support_tickets FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_insert_tickets" ON sc_support_tickets FOR INSERT TO anon WITH CHECK (true);

@@ -3117,6 +3117,7 @@ export type Database = {
           id: string
           last_login: string | null
           password_hash: string
+          password_version: string | null
           updated_at: string | null
           username: string
         }
@@ -3127,6 +3128,7 @@ export type Database = {
           id?: string
           last_login?: string | null
           password_hash: string
+          password_version?: string | null
           updated_at?: string | null
           username: string
         }
@@ -3137,8 +3139,39 @@ export type Database = {
           id?: string
           last_login?: string | null
           password_hash?: string
+          password_version?: string | null
           updated_at?: string | null
           username?: string
+        }
+        Relationships: []
+      }
+      sc_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_name: string | null
+          actor_type: string
+          created_at: string | null
+          details: Json | null
+          id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_name?: string | null
+          actor_type: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_name?: string | null
+          actor_type?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
         }
         Relationships: []
       }
@@ -3150,6 +3183,7 @@ export type Database = {
           bank_name: string
           created_at: string | null
           id: string
+          sort_order: number | null
         }
         Insert: {
           account_name: string
@@ -3158,6 +3192,7 @@ export type Database = {
           bank_name: string
           created_at?: string | null
           id?: string
+          sort_order?: number | null
         }
         Update: {
           account_name?: string
@@ -3166,6 +3201,7 @@ export type Database = {
           bank_name?: string
           created_at?: string | null
           id?: string
+          sort_order?: number | null
         }
         Relationships: []
       }
@@ -3377,6 +3413,54 @@ export type Database = {
         }
         Relationships: []
       }
+      sc_login_attempts: {
+        Row: {
+          attempt_type: string
+          created_at: string | null
+          id: string
+          identifier: string
+          success: boolean | null
+        }
+        Insert: {
+          attempt_type: string
+          created_at?: string | null
+          id?: string
+          identifier: string
+          success?: boolean | null
+        }
+        Update: {
+          attempt_type?: string
+          created_at?: string | null
+          id?: string
+          identifier?: string
+          success?: boolean | null
+        }
+        Relationships: []
+      }
+      sc_manual_payment_config: {
+        Row: {
+          default_method: string | null
+          id: string
+          qris_active: boolean | null
+          qris_image_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          default_method?: string | null
+          id?: string
+          qris_active?: boolean | null
+          qris_image_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          default_method?: string | null
+          id?: string
+          qris_active?: boolean | null
+          qris_image_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sc_orders: {
         Row: {
           buyer_email: string | null
@@ -3384,10 +3468,12 @@ export type Database = {
           buyer_whatsapp: string | null
           created_at: string | null
           digiflazz_ref: string | null
+          digiflazz_sent: boolean
           digiflazz_sn: string | null
           expired_at: string | null
           id: string
           invoice_id: string
+          manual_payment_type: string | null
           notes: string | null
           order_status: string | null
           payment_amount: number
@@ -3395,11 +3481,13 @@ export type Database = {
           payment_fee: number | null
           payment_gateway: string | null
           payment_method: string | null
+          payment_proof_url: string | null
           payment_status: string | null
           payment_url: string | null
           product_name: string
           product_price: number
           product_sku: string
+          reject_reason: string | null
           target: string
           target_detail: string | null
           updated_at: string | null
@@ -3410,10 +3498,12 @@ export type Database = {
           buyer_whatsapp?: string | null
           created_at?: string | null
           digiflazz_ref?: string | null
+          digiflazz_sent?: boolean
           digiflazz_sn?: string | null
           expired_at?: string | null
           id?: string
           invoice_id: string
+          manual_payment_type?: string | null
           notes?: string | null
           order_status?: string | null
           payment_amount?: number
@@ -3421,11 +3511,13 @@ export type Database = {
           payment_fee?: number | null
           payment_gateway?: string | null
           payment_method?: string | null
+          payment_proof_url?: string | null
           payment_status?: string | null
           payment_url?: string | null
           product_name: string
           product_price?: number
           product_sku: string
+          reject_reason?: string | null
           target?: string
           target_detail?: string | null
           updated_at?: string | null
@@ -3436,10 +3528,12 @@ export type Database = {
           buyer_whatsapp?: string | null
           created_at?: string | null
           digiflazz_ref?: string | null
+          digiflazz_sent?: boolean
           digiflazz_sn?: string | null
           expired_at?: string | null
           id?: string
           invoice_id?: string
+          manual_payment_type?: string | null
           notes?: string | null
           order_status?: string | null
           payment_amount?: number
@@ -3447,11 +3541,13 @@ export type Database = {
           payment_fee?: number | null
           payment_gateway?: string | null
           payment_method?: string | null
+          payment_proof_url?: string | null
           payment_status?: string | null
           payment_url?: string | null
           product_name?: string
           product_price?: number
           product_sku?: string
+          reject_reason?: string | null
           target?: string
           target_detail?: string | null
           updated_at?: string | null
@@ -3607,6 +3703,7 @@ export type Database = {
           markup: number | null
           name: string
           password_hash: string
+          password_version: string | null
           status: string | null
           updated_at: string | null
           username: string
@@ -3621,6 +3718,7 @@ export type Database = {
           markup?: number | null
           name: string
           password_hash: string
+          password_version?: string | null
           status?: string | null
           updated_at?: string | null
           username: string
@@ -3635,6 +3733,7 @@ export type Database = {
           markup?: number | null
           name?: string
           password_hash?: string
+          password_version?: string | null
           status?: string | null
           updated_at?: string | null
           username?: string
@@ -3780,7 +3879,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_06_04: {
+      messages_2026_06_18: {
         Row: {
           event: string | null
           extension: string
@@ -3813,7 +3912,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_06_05: {
+      messages_2026_06_19: {
         Row: {
           event: string | null
           extension: string
@@ -3846,7 +3945,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_06_06: {
+      messages_2026_06_20: {
         Row: {
           event: string | null
           extension: string
@@ -3879,7 +3978,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_06_07: {
+      messages_2026_06_21: {
         Row: {
           event: string | null
           extension: string
@@ -3912,7 +4011,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_06_08: {
+      messages_2026_06_22: {
         Row: {
           event: string | null
           extension: string
@@ -3945,40 +4044,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_06_09: {
-        Row: {
-          event: string | null
-          extension: string
-          id: string
-          inserted_at: string
-          payload: Json | null
-          private: boolean | null
-          topic: string
-          updated_at: string
-        }
-        Insert: {
-          event?: string | null
-          extension: string
-          id?: string
-          inserted_at?: string
-          payload?: Json | null
-          private?: boolean | null
-          topic: string
-          updated_at?: string
-        }
-        Update: {
-          event?: string | null
-          extension?: string
-          id?: string
-          inserted_at?: string
-          payload?: Json | null
-          private?: boolean | null
-          topic?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      messages_2026_06_10: {
+      messages_2026_06_23: {
         Row: {
           event: string | null
           extension: string
