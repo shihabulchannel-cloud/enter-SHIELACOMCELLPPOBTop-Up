@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react';
 import { MessageCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { siteSettingsStore } from '@/lib/store';
+import { subscribeToStore } from '@/lib/events';
 
-const WA_NUMBER = '6281234567890';
 const WA_MESSAGE = encodeURIComponent('Halo Admin SHIELACOM CELL, saya ingin mendaftar sebagai reseller.');
 
 const benefits = [
@@ -14,6 +16,14 @@ const benefits = [
 ];
 
 export default function JoinReseller() {
+  const [settings, setSettings] = useState(siteSettingsStore.get());
+
+  useEffect(() => {
+    return subscribeToStore('siteSettings', () => setSettings(siteSettingsStore.get()));
+  }, []);
+
+  const waNumber = settings.whatsapp || '6281234567890';
+  const waLink = `https://wa.me/${waNumber}?text=${WA_MESSAGE}`;
   return (
     <section className="relative py-16 md:py-24 overflow-hidden">
       {/* Wave Top */}
@@ -52,7 +62,7 @@ export default function JoinReseller() {
                 asChild
               >
                 <a
-                  href={`https://wa.me/${WA_NUMBER}?text=${WA_MESSAGE}`}
+                  href={waLink}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

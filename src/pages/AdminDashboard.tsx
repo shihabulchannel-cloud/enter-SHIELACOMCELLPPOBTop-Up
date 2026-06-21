@@ -563,13 +563,13 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 xl:w-64 flex-shrink-0 bg-card border-r border-border sticky top-0 h-screen overflow-hidden">
+      <aside className="hidden md:flex flex-col w-60 xl:w-64 flex-shrink-0 bg-card border-r border-border sticky top-0 h-screen overflow-hidden">
         <Sidebar />
       </aside>
 
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <aside className="absolute left-0 top-0 h-full w-64 bg-card border-r border-border z-10 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-4 border-b border-border">
@@ -587,7 +587,7 @@ export default function AdminDashboard() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
         <header className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 md:px-6 h-14 flex items-center gap-3">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-xl hover:bg-muted transition-colors">
+          <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 rounded-xl hover:bg-muted transition-colors">
             <Menu className="w-5 h-5 text-foreground" />
           </button>
           <div className="flex items-center gap-1.5 text-muted-foreground text-sm">

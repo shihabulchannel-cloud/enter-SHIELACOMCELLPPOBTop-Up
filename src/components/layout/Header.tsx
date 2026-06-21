@@ -66,7 +66,7 @@ export default function Header() {
             </Link>
 
             {/* Desktop Nav */}
-            <nav className="hidden lg:flex items-center gap-1">
+            <nav className="hidden md:flex items-center gap-1">
               {NAV_LINKS.map(link => (
                 <Link
                   key={link.href}
@@ -98,7 +98,7 @@ export default function Header() {
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="lg:hidden p-2 rounded-xl text-white hover:bg-white/10 transition-colors"
+                className="md:hidden p-2 rounded-xl text-white hover:bg-white/10 transition-colors"
               >
                 {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -110,7 +110,7 @@ export default function Header() {
       {/* Mobile Menu */}
       <div
         className={cn(
-          'fixed inset-0 z-40 lg:hidden transition-all duration-300',
+          'fixed inset-0 z-40 md:hidden transition-all duration-300',
           menuOpen ? 'pointer-events-auto' : 'pointer-events-none'
         )}
       >
