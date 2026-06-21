@@ -1,175 +1,240 @@
-# Plan: Premium Hero Slider Redesign
+# Security Hardening Plan — SHIELACOM CELL Auth System
 
-## Context
-User wants a full premium redesign of HeroSlider with 2-column fintech layout (Stripe/Midtrans/Xendit level).
-Current slider: simple gradient + CMS text overlay.
-Goal: Add rich inline SVG illustrations for each theme, glassmorphism cards, particles, animations — without breaking any existing system.
+## Temuan Masalah Keamanan
 
-## Files to Change
+### Kritis
+1. **SHA-256 password hashing** — tidak aman untuk kata sandi (mudah di-brute force dengan GPU)
+2. **Session token = base64(JSON)** — bisa dipalsukan karena tidak ada tanda tangan kriptografi
+3. **Legacy fallback admin**: `{loggedIn: true}` di localStorage cukup untuk lolos auth check
+4. **RLS `service_role_update_orders` berlaku untuk `{public}`** — siapa saja bisa UPDATE semua order (ganti status bayar, approve manual payment)
+5. **`sc_wallet_mutations` ALL untuk `{public}`** — siapa saja bisa insert/update mutasi saldo
 
-1. **`src/index.css`** — add keyframe animations
-2. **`src/components/home/HeroSlider.tsx`** — complete rewrite (2-col layout + SVG visuals per theme)
-3. **`src/lib/store.ts`** — add `bannerLink: ''` to all D_BANNERS defaults (TypeScript compatibility)
+### Tinggi
+6. **Tidak ada rate limiting** — brute force login bebas
+7. **`/admin/dashboard` tidak punya AdminRoute guard** — route check hanya di dalam useEffect (terlambat)
+8. **`sc_deposits`, `sc_reseller_orders` ALL untuk `{public}`** — write bebas dari anon
+9. **Tidak ada audit log** — tidak bisa lacak siapa yang login/ubah data
 
-BannerManager.tsx already has all required admin features — no changes needed there.
-
----
-
-## Strategy
-
-### Behavior rules (unchanged)
-- Banner with `imageDataUrl` → fullscreen image, hide all CMS text, whole-banner clickable
-- Banner without image → 2-column premium design (NEW)
-- Autoplay 5s, prev/next, dots, swipe — unchanged
-
-### 2-Column layout (no image)
-```
-┌──────────────────────────────────┐
-│  Left 50%       │  Right 50%     │
-│  Badge          │  SVG Visual    │
-│  Title          │  (theme-based) │
-│  Subtitle       │                │
-│  CTA Buttons    │                │
-└──────────────────────────────────┘
-Mobile: stacks vertically, visual hidden on xs
-```
-
-### Slide Themes & Visuals
-
-**Slide 1 — pulsa (green):**
-- Gradient: `from-emerald-950 via-green-900 to-teal-950`
-- Visual: Phone mockup (SVG rect + rounded corners) + floating e-wallet icons (GoPay/DANA/OVO/ShopeePay as colored circles with letter) + glass "Transaksi Berhasil" card + floating green particles
-
-**Slide 2 — game (purple):**
-- Gradient: `from-purple-950 via-violet-900 to-indigo-950`
-- Visual: Gaming controller SVG + floating Diamond/Coin icons + ML/FF/PUBG glass cards + neon glow ring + sparkle particles
-
-**Slide 3 — pln (orange/amber):**
-- Gradient: `from-orange-950 via-amber-900 to-yellow-950`
-- Visual: Payment dashboard card (SVG) + floating utility icons (⚡PLN, 💧PDAM, WiFi, Shield/BPJS) + transaction list decoration
-
-**Slide 4 — all (blue-green):**
-- Gradient: `from-slate-950 via-teal-950 to-emerald-950`
-- Visual: Bar chart + line chart SVG + floating badges ("Komisi", "+30%") + network dots decoration
+### Sedang
+10. **Verifikasi token tidak ada** — edge function reseller-auth (update_profile, change_password) tidak verifikasi JWT, cukup kirim reseller_id
 
 ---
 
-## Animation Keyframes (index.css)
+## Scope Perubahan
 
-```css
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-12px); }
-}
-@keyframes float-x {
-  0%, 100% { transform: translateX(0px) translateY(0px); }
-  33% { transform: translateX(-8px) translateY(-6px); }
-  66% { transform: translateX(8px) translateY(-10px); }
-}
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.05); }
-}
-@keyframes particle-drift {
-  0% { transform: translateY(0) translateX(0); opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { transform: translateY(-80px) translateX(20px); opacity: 0; }
-}
-@keyframes slide-left {
-  from { opacity: 0; transform: translateX(-30px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-@keyframes slide-right {
-  from { opacity: 0; transform: translateX(30px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-```
+### Yang DIUBAH:
+- `supabase/functions/admin-login/index.ts` — PBKDF2 hash, JWT bertanda tangan, rate limit, audit log
+- `supabase/functions/reseller-auth/index.ts` — PBKDF2 hash, JWT bertanda tangan, rate limit, session_token di payload
+- `src/lib/admin-auth.ts` — hapus legacy fallback, pakai JWT signed
+- `src/lib/reseller-auth.ts` — pakai signed JWT dari server
+- `src/components/admin/AdminRoute.tsx` — BARU: route guard
+- `src/router.tsx` — wrap `/admin/dashboard` dengan AdminRoute
+- Database migration — tabel baru + perbaikan RLS
 
-Tailwind utility classes to apply:
-- `.animate-float` → `animation: float 3s ease-in-out infinite`
-- `.animate-float-slow` → `animation: float 4.5s ease-in-out infinite`
-- `.animate-float-x` → `animation: float-x 5s ease-in-out infinite`
-- `.animate-pulse-glow` → `animation: pulse-glow 2.5s ease-in-out infinite`
-- `.animate-slide-left` → `animation: slide-left 0.5s ease-out forwards`
-- `.animate-slide-right` → `animation: slide-right 0.5s ease-out forwards`
+### Yang TIDAK DIUBAH:
+- Seluruh halaman frontend (tampilan, form, slider, order, payment)
+- Integrasi Digiflazz
+- Integrasi payment gateway
+- Data di database
+- Struktur tabel yang sudah ada
+- Fitur admin dashboard (hanya proteksi route)
+- sc_payment_configs, sc_digiflazz_config, sc_bank_accounts, sc_company_info — tetap bisa diakses frontend (butuh refactor besar jika diubah)
 
 ---
 
-## Component Architecture
+## Implementasi Detail
 
+### A. Database Migration
+
+```sql
+-- 1. Tabel rate limiting
+CREATE TABLE sc_login_attempts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  identifier text NOT NULL,         -- username
+  attempt_type text NOT NULL,       -- 'admin' | 'reseller'
+  success boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON sc_login_attempts (identifier, attempt_type, created_at DESC);
+
+-- 2. Tabel audit log
+CREATE TABLE sc_audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_type text NOT NULL,         -- 'admin' | 'reseller'
+  actor_id text DEFAULT '',
+  actor_name text DEFAULT '',
+  action text NOT NULL,             -- 'login' | 'logout' | 'password_change' | dll
+  details jsonb DEFAULT '{}',
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX ON sc_audit_logs (actor_type, created_at DESC);
+CREATE INDEX ON sc_audit_logs (action, created_at DESC);
+
+-- 3. Kolom password_version untuk migrasi bertahap
+ALTER TABLE sc_admin_accounts ADD COLUMN IF NOT EXISTS password_version text DEFAULT 'sha256';
+ALTER TABLE sc_resellers ADD COLUMN IF NOT EXISTS password_version text DEFAULT 'sha256';
+
+-- 4. RLS kritis: hapus policy UPDATE orders untuk public
+DROP POLICY IF EXISTS "service_role_update_orders" ON sc_orders;
+
+-- 5. RLS: wallet_mutations — hanya SELECT untuk public
+DROP POLICY IF EXISTS "service_role_mutations" ON sc_wallet_mutations;
+CREATE POLICY "anon_read_mutations" ON sc_wallet_mutations FOR SELECT TO anon USING (true);
+
+-- 6. RLS: reseller_orders — hanya SELECT untuk public  
+DROP POLICY IF EXISTS "service_role_reseller_orders" ON sc_reseller_orders;
+CREATE POLICY "anon_read_reseller_orders" ON sc_reseller_orders FOR SELECT TO anon USING (true);
+
+-- 7. RLS: deposits — hanya SELECT untuk public
+DROP POLICY IF EXISTS "service_role_deposits" ON sc_deposits;
+CREATE POLICY "anon_read_deposits" ON sc_deposits FOR SELECT TO anon USING (true);
+
+-- 8. RLS: resellers — hanya SELECT untuk public (write via service_role edge functions)
+DROP POLICY IF EXISTS "service_role_resellers" ON sc_resellers;
+CREATE POLICY "anon_read_resellers" ON sc_resellers FOR SELECT TO anon USING (true);
+
+-- 9. RLS: support_tickets — SELECT + INSERT untuk public (reseller submit langsung)
+DROP POLICY IF EXISTS "service_role_tickets" ON sc_support_tickets;
+CREATE POLICY "anon_read_tickets" ON sc_support_tickets FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_insert_tickets" ON sc_support_tickets FOR INSERT TO anon WITH CHECK (true);
+
+-- 10. RLS: login_attempts & audit_logs (service_role bypass RLS, tapi tambahkan admin read)
+ALTER TABLE sc_login_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sc_audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_read_audit" ON sc_audit_logs FOR SELECT TO anon USING (true);
 ```
-HeroSlider
- ├── SlideContent (per banner)
- │    ├── [hasImage] → fullscreen img + clickable overlay (unchanged)
- │    └── [no image] → 2-col layout
- │         ├── LeftCol: Badge + H1 + Subtitle + CTAs (animated slide-left)
- │         └── RightCol: <ThemeVisual theme={banner.theme} /> (animated slide-right)
- │
- └── ThemeVisual (new component, same file)
-      ├── PulsaVisual (pulsa)
-      ├── GameVisual (game)
-      ├── PlnVisual (pln)
-      └── AllVisual (all)
-```
 
-All SVG visuals are inline TSX — zero external dependencies, lightweight.
+### B. Password Hashing (PBKDF2 via Web Crypto API)
 
-### Glass Card component (reused across visuals):
-```tsx
-function GlassCard({ children, className }) {
-  return (
-    <div className={cn("backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl shadow-lg", className)}>
-      {children}
-    </div>
-  );
-}
-```
-
-### Particle component (scattered dots):
-```tsx
-function Particles({ color = 'bg-white', count = 8 }) {
-  // Hardcoded positions array (no random — SSR safe, no rerenders)
-  // Each particle: absolute positioned, different animation delays
-}
-```
-
----
-
-## THEME_CONFIG update
-
-Current THEME_CONFIG only has gradient/badge/btnClass. 
-New version adds `bg` (full gradient string for `className`):
+Gunakan PBKDF2 yang tersedia via `crypto.subtle` di Deno — tidak perlu library eksternal.
 
 ```typescript
-const THEME_CONFIG = {
-  pulsa:  { bg: 'from-emerald-950 via-green-900 to-teal-950', badge: '...', btnClass: '...', particleColor: 'bg-emerald-400' },
-  game:   { bg: 'from-purple-950 via-violet-900 to-indigo-950', badge: '...', btnClass: '...', particleColor: 'bg-purple-400' },
-  pln:    { bg: 'from-orange-950 via-amber-900 to-yellow-950', badge: '...', btnClass: '...', particleColor: 'bg-amber-400' },
-  all:    { bg: 'from-slate-950 via-teal-950 to-emerald-950', badge: '...', btnClass: '...', particleColor: 'bg-teal-400' },
-};
+// Hash baru (PBKDF2 + salt random)
+async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' }, key, 256);
+  const saltB64 = btoa(String.fromCharCode(...salt));
+  const hashB64 = btoa(String.fromCharCode(...new Uint8Array(bits)));
+  return `pbkdf2:${saltB64}:${hashB64}`;
+}
+
+// Verifikasi — support kedua format (sha256 lama + pbkdf2 baru)
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (stored.startsWith('pbkdf2:')) {
+    const [, saltB64, hashB64] = stored.split(':');
+    const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' }, key, 256);
+    return btoa(String.fromCharCode(...new Uint8Array(bits))) === hashB64;
+  }
+  // Legacy SHA-256
+  const sha = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  return Array.from(new Uint8Array(sha)).map(b => b.toString(16).padStart(2,'0')).join('') === stored;
+}
 ```
 
+**Strategi migrasi:** saat login berhasil dengan hash lama (SHA-256), langsung re-hash dengan PBKDF2 dan update di DB + set `password_version = 'pbkdf2'`. Tidak perlu reset password manual.
+
+### C. JWT Bertanda Tangan (HMAC-SHA256)
+
+Gunakan `SUPABASE_SERVICE_ROLE_KEY` sebagai signing secret (sudah tersedia di edge functions, kuat secara kriptografi).
+
+```typescript
+async function createJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
+  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = base64url(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${header}.${body}`));
+  return `${header}.${body}.${base64url(new Uint8Array(sig))}`;
+}
+
+async function verifyJWT(token: string, secret: string): Promise<Record<string,unknown> | null> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  const sigBytes = Uint8Array.from(atob(parts[2].replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+  const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
+  if (!valid) return null;
+  const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+  if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+  return payload;
+}
+```
+
+**Frontend:** `admin-auth.ts` dan `reseller-auth.ts` menyimpan JWT di localStorage dan tidak bisa memverifikasi tanda tangan (tidak punya secret). Ini OK — JWT client-side hanya untuk membaca payload (user info, expires). Tanda tangan diverifikasi di sisi server (edge function) bila ada operasi sensitif. Yang penting token tidak bisa **dipalsukan** karena tanpa secret tidak bisa membuat tanda tangan yang valid.
+
+### D. Rate Limiting
+
+Cek sebelum proses login:
+- Hitung failed attempts dalam 15 menit terakhir untuk identifier yang sama
+- Jika ≥ 5, tolak dengan HTTP 429
+- Catat setiap attempt (success/fail) ke `sc_login_attempts`
+- Auto-cleanup: buat index dan gunakan DELETE setelah 24 jam (atau biarkan tumbuh, query sudah pakai time filter)
+
+### E. AdminRoute Component (Baru)
+
+```typescript
+// src/components/admin/AdminRoute.tsx
+import { Navigate } from 'react-router-dom';
+import { isAdminLoggedIn } from '@/lib/admin-auth';
+
+export default function AdminRoute({ children }: { children: React.ReactNode }) {
+  if (!isAdminLoggedIn()) return <Navigate to="/admin" replace />;
+  return <>{children}</>;
+}
+```
+
+Update `router.tsx`: wrap `AdminDashboard` dengan `AdminRoute` (sama seperti `ResellerRoute` saat ini).
+
+### F. Hapus Legacy Fallback
+
+Dari `admin-auth.ts`, hapus blok ini:
+```typescript
+// HAPUS:
+const legacy = localStorage.getItem('shielacom_admin_session');
+if (legacy) {
+  const parsed = JSON.parse(legacy);
+  if (parsed.loggedIn === true) return true;
+}
+```
+
+### G. Audit Logging
+
+Di admin-login dan reseller-auth, tambahkan insert ke `sc_audit_logs` untuk:
+- Login berhasil (actor_type, actor_id, actor_name, action: 'login')
+- Login gagal (action: 'login_failed', details: {username})
+- Ganti password (action: 'password_changed')
+- Register reseller (action: 'register')
+
 ---
 
-## store.ts change
+## File yang Diubah
 
-D_BANNERS: add `bannerLink: ''` to all 4 default banner objects so TypeScript is happy.
-
-Also update D_BANNERS to match better with new 4-slide plan:
-- Slide 1: theme `pulsa` — Pulsa & E-Wallet
-- Slide 2: theme `game` — Top Up Game
-- Slide 3: theme `pln` — PPOB (orange)
-- Slide 4: theme `all` — Reseller / All Services
+| File | Perubahan |
+|------|-----------|
+| Database migration | sc_login_attempts, sc_audit_logs, password_version, RLS fixes |
+| `supabase/functions/admin-login/index.ts` | PBKDF2, JWT, rate limit, audit log, migrasi sha256→pbkdf2 |
+| `supabase/functions/reseller-auth/index.ts` | PBKDF2, JWT, rate limit, audit log, migrasi sha256→pbkdf2 |
+| `src/lib/admin-auth.ts` | Hapus legacy fallback, session_token sebagai opaque JWT |
+| `src/lib/reseller-auth.ts` | Session token dari server (JWT signed) |
+| `src/components/admin/AdminRoute.tsx` | BARU — route guard |
+| `src/router.tsx` | Tambah AdminRoute wrapper |
 
 ---
 
-## Verification
+## Backward Compatibility
 
-After implementing:
-1. Build passes with 0 lint errors
-2. 4 default slides render with 2-column layout
-3. Banners with uploaded images still show fullscreen + clickable
-4. Admin BannerManager: add/edit/delete/reorder all still work
-5. Autoplay, prev/next buttons, swipe, dots all functional
-6. No changes to any backend/API/payment/database code
+- Password lama (SHA-256) tetap bisa login → otomatis re-hash ke PBKDF2 saat login
+- Session lama di localStorage akan expired → paksa login ulang (normal, session 24 jam)
+- Semua read frontend dari tabel reseller tetap berjalan (hanya write yang dibatasi)
+- Admin dashboard tetap bisa baca semua tabel (hanya order UPDATE dari public yang dihapus)
+- Integrasi Digiflazz, Tripay, Duitku TIDAK terpengaruh (semua lewat edge functions service_role)
+
+---
+
+## Risiko Sisa (Known Limitations)
+
+- `sc_digiflazz_config`, `sc_payment_configs`, `sc_bank_accounts` masih bisa ditulis dari anon key — butuh refactor major (admin write via edge function) di sesi lain
+- sc_audit_logs bisa dibaca public (anon) — untuk kemudahan admin baca langsung dari frontend
+- JWT tidak diverifikasi server-side saat reseller membaca data (hanya frontend check) — ini acceptable karena data yang dibaca hanya milik reseller itu sendiri secara filter
