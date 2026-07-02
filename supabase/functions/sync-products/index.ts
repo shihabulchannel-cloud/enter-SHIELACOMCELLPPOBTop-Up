@@ -112,7 +112,6 @@ Deno.serve(async (req: Request) => {
     const apiMsg = responseData.message || "-";
     log(`Keys: ${Object.keys(responseData).join(", ")}, RC=${rc ?? "tidak ada"}, message=${apiMsg}`);
 
-    // Handle sukses: data adalah array langsung
     if (!Array.isArray(responseData.data)) {
       const innerData = responseData.data;
       if (innerData && typeof innerData === "object" && innerData.rc) {
@@ -130,7 +129,29 @@ Deno.serve(async (req: Request) => {
     const products = responseData.data;
     log(`OK: ${products.length} produk diterima`);
 
-    log("STEP 5: Menyimpan ke database (batch 100)...");
+    // ─── STEP 4.5: Baca produk yang sudah ada untuk MEMPERTAHANKAN MARKUP ────
+    // Ini mencegah sell_price yang sudah diatur admin tertimpa saat sinkronisasi.
+    log("STEP 4.5: Membaca markup produk yang sudah ada...");
+    const { data: existingRows, error: existingErr } = await supabase
+      .from("sc_products")
+      .select("sku, buy_price, sell_price");
+
+    if (existingErr) {
+      log(`WARNING: Gagal membaca produk lama (${existingErr.message}) — markup tidak bisa dipertahankan, menggunakan default +1000`);
+    }
+
+    // Buat map: sku → margin (sell_price - buy_price)
+    // Margin ini akan dipertahankan saat harga modal dari Digiflazz berubah.
+    const marginMap = new Map<string, number>();
+    for (const row of existingRows || []) {
+      const margin = (row.sell_price ?? 0) - (row.buy_price ?? 0);
+      // Hanya simpan margin jika valid (> 0), jika negatif atau nol pakai default
+      marginMap.set(row.sku, margin > 0 ? margin : 1000);
+    }
+    log(`OK: ${marginMap.size} produk lama dibaca, margin akan dipertahankan`);
+    // ─────────────────────────────────────────────────────────────────────────
+
+    log("STEP 5: Menyimpan ke database (batch 100) dengan markup terjaga...");
     let synced = 0, skipped = 0;
     const dbErrors: string[] = [];
     const BATCH = 100;
@@ -139,18 +160,35 @@ Deno.serve(async (req: Request) => {
       const chunk = products.slice(i, i + BATCH);
       const rows = chunk
         .filter((p: Record<string, unknown>) => p.buyer_sku_code && p.product_name)
-        .map((p: Record<string, unknown>) => ({
-          sku: String(p.buyer_sku_code),
-          name: String(p.product_name),
-          category_id: mapCategory(String(p.category || "")),
-          brand: String(p.brand || ""),
-          buy_price: parseInt(String(p.price)) || 0,
-          sell_price: (parseInt(String(p.price)) || 0) + 1000,
-          active: p.buyer_product_status === true && p.seller_product_status === true,
-          provider: "digiflazz",
-          provider_code: String(p.buyer_sku_code),
-          updated_at: new Date().toISOString(),
-        }));
+        .map((p: Record<string, unknown>) => {
+          const sku = String(p.buyer_sku_code);
+          const newBuyPrice = parseInt(String(p.price)) || 0;
+
+          // ── LOGIKA MARKUP TERJAGA ──────────────────────────────────────────
+          // Jika produk SUDAH ADA di database: gunakan margin lama (sell - buy)
+          //   → sell_price baru = buy_price baru + margin lama
+          //   → Contoh: buy lama 18.500, margin 1.500 → sell 20.000
+          //             buy baru  19.000, margin 1.500 → sell 20.500 ✓
+          // Jika produk BARU: gunakan margin default +1000
+          const existingMargin = marginMap.get(sku);
+          const newSellPrice = existingMargin !== undefined
+            ? newBuyPrice + existingMargin   // Pertahankan markup admin
+            : newBuyPrice + 1000;            // Default untuk produk baru
+          // ──────────────────────────────────────────────────────────────────
+
+          return {
+            sku,
+            name: String(p.product_name),
+            category_id: mapCategory(String(p.category || "")),
+            brand: String(p.brand || ""),
+            buy_price: newBuyPrice,
+            sell_price: newSellPrice,          // ← Tidak lagi menimpa markup!
+            active: p.buyer_product_status === true && p.seller_product_status === true,
+            provider: "digiflazz",
+            provider_code: sku,
+            updated_at: new Date().toISOString(),
+          };
+        });
 
       skipped += chunk.length - rows.length;
       if (rows.length === 0) continue;
@@ -168,14 +206,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // SAVE last_synced timestamp
+    // Update last_synced
     const now = new Date().toISOString();
     await supabase.from("sc_digiflazz_config").update({
       last_synced: now,
       updated_at: now,
     }).eq("provider", "digiflazz");
 
-    log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati ===`);
+    log(`=== SELESAI: ${synced} berhasil, ${skipped} dilewati — markup terjaga ===`);
     return respond({ success: true, synced, skipped, total: products.length, db_errors: dbErrors });
 
   } catch (err) {

@@ -1,0 +1,10 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="spay-bg" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FF7744"/>
+      <stop offset="100%" stop-color="#EE4D2D"/>
+    </radialGradient>
+  </defs>
+  <circle cx="50" cy="50" r="48" fill="url(#spay-bg)"/>
+  <path d="M50 22 C34 22 22 30 22 42 C22 50 28 55 38 57 L42 58 C46 59 48 60 48 63 C48 66 45 68 40 68 C35 68 30 66 27 63 L22 68 C26 73 33 76 40 76 C56 76 58 66 58 63 C58 55 52 50 42 48 L38 47 C34 46 32 44 32 42 C32 38 35 36 40 36 C45 36 49 38 52 41 L57 36 C53 30 52 22 50 22Z" fill="white"/>
+</svg>

@@ -1,0 +1,10 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="tri-bg" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FF8800"/>
+      <stop offset="100%" stop-color="#DD4400"/>
+    </radialGradient>
+  </defs>
+  <circle cx="50" cy="50" r="48" fill="url(#tri-bg)"/>
+  <text x="50" y="66" text-anchor="middle" fill="white" font-size="48" font-weight="900" font-family="Arial,sans-serif">3</text>
+</svg>
