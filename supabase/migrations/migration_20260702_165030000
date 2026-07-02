@@ -1,0 +1,11 @@
+-- Tambahkan kolom price_mode ke sc_products
+-- 'auto'   = sell_price dihitung ulang saat sync Digiflazz
+-- 'manual' = sell_price tidak pernah diubah saat sync
+ALTER TABLE sc_products
+  ADD COLUMN IF NOT EXISTS price_mode text NOT NULL DEFAULT 'auto';
+
+-- Pastikan produk yang sudah ada tetap 'auto' (default behaviour)
+-- Tidak perlu UPDATE karena DEFAULT sudah 'auto'
+
+COMMENT ON COLUMN sc_products.price_mode IS
+  'auto: sell_price dihitung ulang saat sync. manual: sell_price dikunci oleh admin dan tidak diubah saat sync Digiflazz.';
