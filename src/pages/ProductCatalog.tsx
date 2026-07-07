@@ -94,6 +94,15 @@ export default function ProductCatalog() {
     [products],
   );
 
+  // Product count per brand — passed to SubCategoryGrid for "X produk" badge
+  const productCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach(p => {
+      if (p.brand) counts[p.brand] = (counts[p.brand] ?? 0) + 1;
+    });
+    return counts;
+  }, [products]);
+
   // Resolve brand slug → brand name
   const activeBrandName = brandSlug ? slugToBrand(brandSlug, allBrands) : null;
 
@@ -167,20 +176,24 @@ export default function ProductCatalog() {
         </div>
 
         {/* ── SUB-CATEGORY GRID MODE ── */}
-        {showSubCatGrid ? (
+        {(showSubCatGrid || cmsLoading) && !brandSlug ? (
           <section className="py-8 bg-background">
             <div className="container mx-auto px-4">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-foreground mb-1">
-                  Pilih {category?.label}
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  Klik untuk melihat produk dan harga terbaik
-                </p>
-              </div>
+              {!cmsLoading && (
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-foreground mb-1">
+                    Pilih {category?.label}
+                  </h2>
+                  <p className="text-muted-foreground text-sm">
+                    Klik untuk melihat produk dan harga terbaik
+                  </p>
+                </div>
+              )}
               <SubCategoryGrid
                 items={cmsSubCats}
                 categorySlug={categorySlug ?? ''}
+                productCounts={productCounts}
+                loading={cmsLoading}
               />
             </div>
           </section>

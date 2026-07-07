@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, ChevronRight } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -106,7 +106,7 @@ export default function Products() {
           </section>
         )}
 
-        {/* Category Grid */}
+        {/* Category Grid — Arena Gamers style */}
         {!search.trim() && (
           <section className="py-12 bg-background">
             <div className="container mx-auto px-4">
@@ -116,44 +116,46 @@ export default function Products() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {CATEGORIES.map(cat => {
-                  const Icon    = cat.icon;
-                  const cmsCat  = cmsTopCats.find(c => c.slug === cat.slug);
-                  const hasCmsThumb = !!cmsCat?.thumbnail_url;
+                  const Icon       = cat.icon;
+                  const cmsCat     = cmsTopCats.find(c => c.slug === cat.slug);
+                  const thumbUrl   = cmsCat?.thumbnail_url;
                   return (
                     <Link
                       key={cat.id}
                       to={`/products/${cat.slug}`}
-                      className="group card-hover rounded-2xl border border-border bg-card text-center flex flex-col items-center gap-3 hover:border-primary/40 transition-all overflow-hidden"
+                      className="group relative block overflow-hidden rounded-2xl aspect-square shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300"
                     >
-                      {/* Thumbnail area */}
-                      {hasCmsThumb ? (
-                        <div className="w-full aspect-video overflow-hidden">
-                          <img
-                            src={cmsCat!.thumbnail_url}
-                            alt={cat.label}
-                            loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        </div>
+                      {/* Cover: CMS image or gradient fallback */}
+                      {thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt={cat.label}
+                          loading="lazy"
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
                       ) : (
-                        <div className={cn(
-                          'w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110 mt-5',
-                          cat.gradient,
-                        )}>
-                          <Icon className="w-7 h-7 text-white" />
+                        <div className={cn('absolute inset-0 bg-gradient-to-br', cat.gradient)}>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Icon className="w-16 h-16 text-white/20" />
+                          </div>
                         </div>
                       )}
-                      <div className={cn('pb-4', hasCmsThumb ? 'px-3' : 'px-5')}>
-                        <p className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">
+
+                      {/* Dark gradient overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+
+                      {/* Text content */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <h3 className="text-white font-bold text-sm leading-tight drop-shadow-sm">
                           {cat.label}
-                        </p>
-                        <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2 leading-relaxed">
+                        </h3>
+                        <p className="mt-0.5 text-white/65 text-xs line-clamp-1">
                           {cat.description.split('.')[0]}
                         </p>
-                        <div className="flex items-center justify-center gap-1 text-primary text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity mt-1">
-                          Lihat Produk <ChevronRight className="w-3.5 h-3.5" />
-                        </div>
                       </div>
+
+                      {/* Subtle shine on hover */}
+                      <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/5" />
                     </Link>
                   );
                 })}
