@@ -36,8 +36,8 @@ export default function CategoryBanner({
             className="absolute inset-0"
             style={{
               backgroundImage:    `url(${cmsbannerUrl})`,
-              backgroundSize:     '100% auto',
-              backgroundPosition: 'center top',
+              backgroundSize:     'cover',
+              backgroundPosition: 'center',
               backgroundRepeat:   'no-repeat',
             }}
           />

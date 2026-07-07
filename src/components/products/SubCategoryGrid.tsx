@@ -68,7 +68,7 @@ export default function SubCategoryGrid({
                 src={item.thumbnail_url}
                 alt={item.name}
                 loading="lazy"
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                className="absolute inset-0 h-full w-full object-contain transition-transform duration-500 group-hover:scale-110"
               />
             ) : (
               <div className={cn('absolute inset-0 bg-gradient-to-br', bg)}>

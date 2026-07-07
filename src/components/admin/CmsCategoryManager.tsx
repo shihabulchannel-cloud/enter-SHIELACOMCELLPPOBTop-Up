@@ -38,15 +38,17 @@ function ImageUpload({
   label,
   value,
   folder,
+  preset: presetOverride,
   onUploaded,
 }: {
-  label:      string;
-  value:      string;
-  folder:     Folder;
-  onUploaded: (url: string) => void;
+  label:        string;
+  value:        string;
+  folder:       Folder;
+  preset?:      ImagePresetKey;   // overrides FOLDER_TO_PRESET default
+  onUploaded:   (url: string) => void;
 }) {
   const { triggerCrop, cropModal, uploading, error } = useImageCrop({
-    preset: FOLDER_TO_PRESET[folder],
+    preset: presetOverride ?? FOLDER_TO_PRESET[folder],
     folder,
     onUrl: onUploaded,
   });
@@ -285,6 +287,7 @@ function CategoryForm({ initial, isSub, parentSlug, onSaved, onCancel }: Categor
           label="Thumbnail Card"
           value={form.thumbnail_url}
           folder="thumbnails"
+          preset={isSub ? 'subcategory' : 'thumbnail'}
           onUploaded={url => set('thumbnail_url')(url)}
         />
         <ImageUpload
