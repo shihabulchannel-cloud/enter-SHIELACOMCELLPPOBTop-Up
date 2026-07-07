@@ -9,18 +9,27 @@ import WhatsAppFloat from '@/components/layout/WhatsAppFloat';
 import ProductGrid from '@/components/products/ProductGrid';
 import { CATEGORIES, setCategoryMeta } from '@/lib/product-slugs';
 import { getProductsFromDB } from '@/lib/order-api';
+import { getCmsTopCategories, type CmsCategory } from '@/lib/cms-api';
 import { cn } from '@/lib/utils';
 import type { ProductItem } from '@/components/products/ProductCard';
 
 export default function Products() {
   const navigate = useNavigate();
-  const [search,   setSearch]   = useState('');
-  const [results,  setResults]  = useState<ProductItem[]>([]);
-  const [loading,  setLoading]  = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [search,    setSearch]    = useState('');
+  const [results,   setResults]   = useState<ProductItem[]>([]);
+  const [loading,   setLoading]   = useState(false);
+  const [searched,  setSearched]  = useState(false);
+  const [cmsTopCats, setCmsTopCats] = useState<CmsCategory[]>([]);
 
   // Page SEO
   useEffect(() => { setCategoryMeta(null, null); }, []);
+
+  // Fetch CMS top-level category thumbnails
+  useEffect(() => {
+    getCmsTopCategories()
+      .then(data => setCmsTopCats(data.filter(c => c.is_active)))
+      .catch(() => {});
+  }, []);
 
   // Debounced live search across all categories
   useEffect(() => {
@@ -107,29 +116,43 @@ export default function Products() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {CATEGORIES.map(cat => {
-                  const Icon = cat.icon;
+                  const Icon    = cat.icon;
+                  const cmsCat  = cmsTopCats.find(c => c.slug === cat.slug);
+                  const hasCmsThumb = !!cmsCat?.thumbnail_url;
                   return (
                     <Link
                       key={cat.id}
                       to={`/products/${cat.slug}`}
-                      className="group card-hover rounded-2xl p-5 border border-border bg-card text-center flex flex-col items-center gap-3 hover:border-primary/40 transition-all"
+                      className="group card-hover rounded-2xl border border-border bg-card text-center flex flex-col items-center gap-3 hover:border-primary/40 transition-all overflow-hidden"
                     >
-                      <div className={cn(
-                        'w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110',
-                        cat.gradient,
-                      )}>
-                        <Icon className="w-7 h-7 text-white" />
-                      </div>
-                      <div>
+                      {/* Thumbnail area */}
+                      {hasCmsThumb ? (
+                        <div className="w-full aspect-video overflow-hidden">
+                          <img
+                            src={cmsCat!.thumbnail_url}
+                            alt={cat.label}
+                            loading="lazy"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        </div>
+                      ) : (
+                        <div className={cn(
+                          'w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-sm transition-transform group-hover:scale-110 mt-5',
+                          cat.gradient,
+                        )}>
+                          <Icon className="w-7 h-7 text-white" />
+                        </div>
+                      )}
+                      <div className={cn('pb-4', hasCmsThumb ? 'px-3' : 'px-5')}>
                         <p className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">
                           {cat.label}
                         </p>
                         <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2 leading-relaxed">
                           {cat.description.split('.')[0]}
                         </p>
-                      </div>
-                      <div className="flex items-center gap-1 text-primary text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-                        Lihat Produk <ChevronRight className="w-3.5 h-3.5" />
+                        <div className="flex items-center justify-center gap-1 text-primary text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity mt-1">
+                          Lihat Produk <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
                       </div>
                     </Link>
                   );

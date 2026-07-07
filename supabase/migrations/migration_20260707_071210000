@@ -1,0 +1,113 @@
+-- ============================================================
+-- CMS KATEGORI — tabel baru, tidak menyentuh tabel lama
+-- ============================================================
+
+-- Tabel: kategori visual (top-level dan sub-kategori/brand)
+CREATE TABLE IF NOT EXISTS sc_cms_categories (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug             text NOT NULL,
+  name             text NOT NULL,
+  parent_slug      text,           -- null = top-level; slug kategori induk untuk sub
+  brand_name       text DEFAULT '', -- nama brand di sc_products.brand (untuk sub-kategori)
+  thumbnail_url    text DEFAULT '',
+  banner_url       text DEFAULT '',
+  icon_url         text DEFAULT '',
+  bg_color         text DEFAULT 'from-blue-500 to-blue-700',
+  description      text DEFAULT '',
+  seo_title        text DEFAULT '',
+  seo_description  text DEFAULT '',
+  display_order    int  DEFAULT 0,
+  is_active        boolean DEFAULT true,
+  created_at       timestamptz DEFAULT now(),
+  updated_at       timestamptz DEFAULT now()
+);
+
+-- Index untuk lookup cepat
+CREATE UNIQUE INDEX IF NOT EXISTS sc_cms_categories_slug_parent
+  ON sc_cms_categories (slug, COALESCE(parent_slug, ''));
+
+CREATE INDEX IF NOT EXISTS sc_cms_categories_parent_slug
+  ON sc_cms_categories (parent_slug);
+
+-- RLS
+ALTER TABLE sc_cms_categories ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public_read_cms_categories"
+  ON sc_cms_categories FOR SELECT USING (true);
+
+CREATE POLICY "anon_insert_cms_categories"
+  ON sc_cms_categories FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "anon_update_cms_categories"
+  ON sc_cms_categories FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE POLICY "anon_delete_cms_categories"
+  ON sc_cms_categories FOR DELETE USING (true);
+
+-- ============================================================
+-- Tabel: Media Library
+-- ============================================================
+CREATE TABLE IF NOT EXISTS sc_cms_media (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  file_name     text NOT NULL,
+  original_name text DEFAULT '',
+  file_url      text NOT NULL,
+  file_size     int  DEFAULT 0,
+  file_type     text DEFAULT '',
+  media_type    text DEFAULT 'image', -- 'thumbnail','banner','icon','background'
+  alt_text      text DEFAULT '',
+  created_at    timestamptz DEFAULT now()
+);
+
+ALTER TABLE sc_cms_media ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public_read_cms_media"
+  ON sc_cms_media FOR SELECT USING (true);
+
+CREATE POLICY "anon_insert_cms_media"
+  ON sc_cms_media FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "anon_delete_cms_media"
+  ON sc_cms_media FOR DELETE USING (true);
+
+-- ============================================================
+-- Supabase Storage: bucket cms-media (public)
+-- ============================================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'cms-media',
+  'cms-media',
+  true,
+  5242880, -- 5MB limit
+  ARRAY['image/jpeg','image/png','image/webp','image/svg+xml','image/gif']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS policies
+CREATE POLICY "anon_read_cms_media_storage"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'cms-media');
+
+CREATE POLICY "anon_upload_cms_media_storage"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'cms-media');
+
+CREATE POLICY "anon_delete_cms_media_storage"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'cms-media');
+
+-- ============================================================
+-- Updated_at trigger
+-- ============================================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_cms_categories_updated_at ON sc_cms_categories;
+CREATE TRIGGER set_cms_categories_updated_at
+  BEFORE UPDATE ON sc_cms_categories
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

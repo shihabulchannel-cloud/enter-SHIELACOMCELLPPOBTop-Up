@@ -11,12 +11,14 @@ import CategoryBanner from '@/components/products/CategoryBanner';
 import FAQSection from '@/components/products/FAQSection';
 import PromoSection from '@/components/products/PromoSection';
 import ProductGrid from '@/components/products/ProductGrid';
+import SubCategoryGrid from '@/components/products/SubCategoryGrid';
 import {
   getCategoryBySlug,
   slugToBrand,
   setCategoryMeta,
 } from '@/lib/product-slugs';
 import { getProductsFromDB } from '@/lib/order-api';
+import { getCmsSubCategories, getCmsCategoryBySlug, type CmsCategory } from '@/lib/cms-api';
 import type { ProductItem } from '@/components/products/ProductCard';
 
 export default function ProductCatalog() {
@@ -26,10 +28,13 @@ export default function ProductCatalog() {
   }>();
   const navigate = useNavigate();
 
-  const [products, setProducts] = useState<ProductItem[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState('');
-  const [search,   setSearch]   = useState('');
+  const [products,    setProducts]    = useState<ProductItem[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState('');
+  const [search,      setSearch]      = useState('');
+  const [cmsSubCats,  setCmsSubCats]  = useState<CmsCategory[]>([]);
+  const [cmsLoading,  setCmsLoading]  = useState(false);
+  const [cmsCatData,  setCmsCatData]  = useState<CmsCategory | null>(null);
 
   // Resolve slug → metadata
   const category = getCategoryBySlug(categorySlug ?? '');
@@ -39,7 +44,29 @@ export default function ProductCatalog() {
     if (!loading && !category) navigate('/products', { replace: true });
   }, [category, loading, navigate]);
 
+  // Fetch CMS sub-categories when on category landing page (no brandSlug)
+  useEffect(() => {
+    if (!categorySlug || brandSlug) {
+      setCmsSubCats([]);
+      return;
+    }
+    setCmsLoading(true);
+    getCmsSubCategories(categorySlug)
+      .then(data => setCmsSubCats(data.filter(c => c.is_active)))
+      .catch(() => setCmsSubCats([]))
+      .finally(() => setCmsLoading(false));
+  }, [categorySlug, brandSlug]);
+
+  // Fetch CMS top-level category data (for banner URL)
+  useEffect(() => {
+    if (!categorySlug) return;
+    getCmsCategoryBySlug(categorySlug, null)
+      .then(data => setCmsCatData(data))
+      .catch(() => {});
+  }, [categorySlug]);
+
   // Fetch all products for this category
+  // Only load products when brandSlug is set OR when CMS has no sub-cats
   const loadProducts = async () => {
     if (!category) return;
     setLoading(true);
@@ -110,6 +137,10 @@ export default function ProductCatalog() {
     return items;
   }, [category, categorySlug, activeBrandName]);
 
+  // Sub-category grid mode:
+  // Show if: no brandSlug, CMS sub-cats loaded, and at least one exists
+  const showSubCatGrid = !brandSlug && !cmsLoading && cmsSubCats.length > 0;
+
   if (!category && !loading) return null;
 
   return (
@@ -122,9 +153,11 @@ export default function ProductCatalog() {
           <CategoryBanner
             category={category}
             brandName={activeBrandName}
-            search={search}
-            onSearch={setSearch}
-            totalCount={filtered.length}
+            search={showSubCatGrid ? '' : search}
+            onSearch={showSubCatGrid ? () => {} : setSearch}
+            totalCount={showSubCatGrid ? cmsSubCats.length : filtered.length}
+            hideSearch={showSubCatGrid}
+            cmsbannerUrl={cmsCatData?.banner_url || undefined}
           />
         )}
 
@@ -133,74 +166,96 @@ export default function ProductCatalog() {
           <Breadcrumb items={breadcrumbItems} />
         </div>
 
-        {/* Brand Tabs — URL-based navigation */}
-        {allBrands.length > 1 && category && (
-          <BrandTabs
-            brands={allBrands}
-            categorySlug={category.slug}
-            activeBrandSlug={brandSlug}
-          />
-        )}
+        {/* ── SUB-CATEGORY GRID MODE ── */}
+        {showSubCatGrid ? (
+          <section className="py-8 bg-background">
+            <div className="container mx-auto px-4">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-foreground mb-1">
+                  Pilih {category?.label}
+                </h2>
+                <p className="text-muted-foreground text-sm">
+                  Klik untuk melihat produk dan harga terbaik
+                </p>
+              </div>
+              <SubCategoryGrid
+                items={cmsSubCats}
+                categorySlug={categorySlug ?? ''}
+              />
+            </div>
+          </section>
+        ) : (
+          <>
+            {/* Brand Tabs — URL-based navigation */}
+            {allBrands.length > 1 && category && !showSubCatGrid && (
+              <BrandTabs
+                brands={allBrands}
+                categorySlug={category.slug}
+                activeBrandSlug={brandSlug}
+              />
+            )}
 
-        {/* Product Grid */}
-        <section className="py-8 bg-background" id={`produk-${category?.id}`}>
-          <div className="container mx-auto px-4">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <p className="text-muted-foreground">Memuat produk...</p>
-              </div>
-            ) : error ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <p className="text-muted-foreground">{error}</p>
-                <Button onClick={loadProducts} variant="outline" className="rounded-xl gap-2">
-                  <RefreshCw className="w-4 h-4" /> Coba Lagi
-                </Button>
-              </div>
-            ) : (
-              <>
-                {activeBrandName && (
-                  <div className="flex items-center gap-3 mb-6">
-                    <span className="w-1 h-5 rounded-full bg-primary" />
-                    <h2 className="text-lg font-bold text-foreground">{activeBrandName}</h2>
-                    <span className="text-muted-foreground text-sm">({filtered.length} produk)</span>
+            {/* Product Grid */}
+            <section className="py-8 bg-background" id={`produk-${category?.id}`}>
+              <div className="container mx-auto px-4">
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-muted-foreground">Memuat produk...</p>
                   </div>
-                )}
-
-                {/* Group by brand if no active brand filter */}
-                {!activeBrandName && allBrands.length > 1 ? (
-                  <div className="space-y-10">
-                    {allBrands.map(brand => {
-                      const brandProds = filtered.filter(p => p.brand === brand);
-                      if (brandProds.length === 0) return null;
-                      return (
-                        <div key={brand}>
-                          <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                            <span className="w-1 h-3 rounded-full bg-primary inline-block" />
-                            {brand}
-                          </p>
-                          <ProductGrid products={brandProds} />
-                        </div>
-                      );
-                    })}
-                    {filtered.length === 0 && (
-                      <ProductGrid
-                        products={[]}
-                        emptyMessage={`Tidak ada produk ${category?.label.toLowerCase() ?? ''} yang cocok.`}
-                      />
-                    )}
+                ) : error ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-4">
+                    <p className="text-muted-foreground">{error}</p>
+                    <Button onClick={loadProducts} variant="outline" className="rounded-xl gap-2">
+                      <RefreshCw className="w-4 h-4" /> Coba Lagi
+                    </Button>
                   </div>
                 ) : (
-                  <ProductGrid products={filtered} emptyMessage="Tidak ada produk ditemukan." />
-                )}
-              </>
-            )}
-          </div>
-        </section>
+                  <>
+                    {activeBrandName && (
+                      <div className="flex items-center gap-3 mb-6">
+                        <span className="w-1 h-5 rounded-full bg-primary" />
+                        <h2 className="text-lg font-bold text-foreground">{activeBrandName}</h2>
+                        <span className="text-muted-foreground text-sm">({filtered.length} produk)</span>
+                      </div>
+                    )}
 
-        {/* Promo & FAQ — only when loaded */}
-        {category && !loading && !error && <PromoSection category={category} />}
-        {category && <FAQSection category={category} />}
+                    {/* Group by brand if no active brand filter */}
+                    {!activeBrandName && allBrands.length > 1 ? (
+                      <div className="space-y-10">
+                        {allBrands.map(brand => {
+                          const brandProds = filtered.filter(p => p.brand === brand);
+                          if (brandProds.length === 0) return null;
+                          return (
+                            <div key={brand}>
+                              <p className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                                <span className="w-1 h-3 rounded-full bg-primary inline-block" />
+                                {brand}
+                              </p>
+                              <ProductGrid products={brandProds} />
+                            </div>
+                          );
+                        })}
+                        {filtered.length === 0 && (
+                          <ProductGrid
+                            products={[]}
+                            emptyMessage={`Tidak ada produk ${category?.label.toLowerCase() ?? ''} yang cocok.`}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <ProductGrid products={filtered} emptyMessage="Tidak ada produk ditemukan." />
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* Promo & FAQ — only when loaded */}
+            {category && !loading && !error && <PromoSection category={category} />}
+            {category && <FAQSection category={category} />}
+          </>
+        )}
 
       </main>
       <Footer />

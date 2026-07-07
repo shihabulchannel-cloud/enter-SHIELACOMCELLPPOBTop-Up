@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Globe, Image, Package, Tag, Zap, CreditCard, TrendingUp, Users,
   FileText, BarChart2, Activity, Bell, LogOut, Menu, X, ChevronRight, Shield, Loader2,
-  UserCog, KeyRound, CheckCircle2, AlertCircle, RefreshCw, Banknote, ClipboardCheck
+  UserCog, KeyRound, CheckCircle2, AlertCircle, RefreshCw, Banknote, ClipboardCheck,
+  Layers,
 } from 'lucide-react';
 import { isAdminLoggedIn, adminLogout, getAdminSession, changeAdminPassword } from '@/lib/admin-auth';
 import { notificationStore, logAction } from '@/lib/store';
@@ -23,6 +24,7 @@ import ReportsPanel from '@/components/admin/ReportsPanel';
 import SystemPanel from '@/components/admin/SystemPanel';
 import ManualPaymentSettings from '@/components/admin/ManualPaymentSettings';
 import PaymentVerification from '@/components/admin/PaymentVerification';
+import CmsCategoryManager from '@/components/admin/CmsCategoryManager';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -34,7 +36,7 @@ import { cn } from '@/lib/utils';
 type SectionKey =
   | 'overview' | 'profile'
   | 'website' | 'banners'
-  | 'products' | 'categories'
+  | 'products' | 'categories' | 'cms_categories'
   | 'provider' | 'payment' | 'markup'
   | 'manual_config' | 'manual_payments'
   | 'resellers' | 'deposits' | 'bank_accounts'
@@ -73,11 +75,12 @@ function buildNav(unreadNotifs: number, pendingDeposits: number, pendingManual: 
     {
       group: 'Produk',
       items: [
-        { key: 'products', label: 'Daftar Produk', icon: Package },
-        { key: 'categories', label: 'Kategori', icon: Tag },
-        { key: 'provider', label: 'Provider (Digiflazz)', icon: Zap },
-        { key: 'payment', label: 'Payment Gateway', icon: CreditCard },
-        { key: 'markup', label: 'Markup Harga', icon: TrendingUp },
+        { key: 'products',       label: 'Daftar Produk',            icon: Package },
+        { key: 'categories',     label: 'Kategori',                  icon: Tag },
+        { key: 'cms_categories', label: 'CMS Kategori',              icon: Layers },
+        { key: 'provider',       label: 'Provider (Digiflazz)',      icon: Zap },
+        { key: 'payment',        label: 'Payment Gateway',           icon: CreditCard },
+        { key: 'markup',         label: 'Markup Harga',              icon: TrendingUp },
       ],
     },
     {
@@ -412,7 +415,8 @@ function SectionContent({ section, navigate: nav }: { section: SectionKey; navig
     case 'website': return <WebsiteManagement defaultSection="general" />;
     case 'banners': return <BannerManager />;
     case 'products': return <ProductManager />;
-    case 'categories': return <CategoryManager />;
+    case 'categories':     return <CategoryManager />;
+    case 'cms_categories': return <CmsCategoryManager />;
     case 'provider': return <ProviderSettings defaultTab="digiflazz" />;
     case 'payment': return <PaymentGatewaySettings />;
     case 'markup': return <MarkupSettings />;
