@@ -34,10 +34,17 @@ export default function CategoryBanner({
           <img
             src={cmsbannerUrl}
             alt={title}
-            className="w-full h-full object-cover opacity-30"
+            className="w-full h-full object-cover"
             loading="eager"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/60" />
+          {/* Emerald-tinted overlay — ringan agar detail banner tetap terlihat */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(0,55,35,0.22) 0%, rgba(0,35,20,0.32) 100%)',
+            }}
+          />
         </div>
       )}
 
