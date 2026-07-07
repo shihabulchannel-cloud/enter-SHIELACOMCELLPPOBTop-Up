@@ -5,7 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { categoryStore, type Category } from '@/lib/store';
+import { getAdminSession } from '@/lib/admin-auth';
 import { cn } from '@/lib/utils';
+
+/** Panggil admin-api Edge Function dengan validasi JWT admin */
+async function adminApi(action: string, payload: Record<string, unknown>) {
+  const session = getAdminSession();
+  const { data, error } = await supabase.functions.invoke('admin-api', {
+    body: { action, payload },
+    headers: { Authorization: `Bearer ${session?.session_token ?? ''}` },
+  });
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
 
 interface DbProduct {
   id: string;
@@ -243,67 +256,44 @@ export default function ProductManager() {
   const handleSave = async (form: Partial<DbProduct>) => {
     setSaving(true);
     setSaveError('');
-    if (editing) {
-      // Edit produk yang sudah ada → kunci ke mode MANUAL
-      const { error } = await supabase
-        .from('sc_products')
-        .update({
-          ...form,
-          price_mode: 'manual',          // ← Kunci harga manual
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editing.id);
-      if (error) {
-        setSaveError(`Gagal menyimpan: ${error.message}`);
-        setSaving(false);
-        return;
-      }
-      setEditing(null);
-    } else {
-      // Tambah produk baru secara manual → langsung MANUAL
-      const { error } = await supabase
-        .from('sc_products')
-        .insert({
-          ...form,
-          provider:   'manual',
-          price_mode: 'manual',          // ← Produk manual selalu dikunci
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+    try {
+      if (editing) {
+        await adminApi('product_update', {
+          id: editing.id,
+          data: { ...form, price_mode: 'manual', updated_at: new Date().toISOString() },
         });
-      if (error) {
-        setSaveError(`Gagal menambah: ${error.message}`);
-        setSaving(false);
-        return;
+        setEditing(null);
+      } else {
+        await adminApi('product_insert', {
+          data: { ...form, provider: 'manual', price_mode: 'manual', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        });
+        setAdding(false);
       }
-      setAdding(false);
+      loadProducts();
+    } catch (err) {
+      setSaveError(`Gagal menyimpan: ${err instanceof Error ? err.message : 'Error tidak diketahui'}`);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    loadProducts();
   };
 
   /* ── Reset harga ke AUTO ── */
   const handleResetToAuto = async (p: DbProduct) => {
     if (!confirm(`Reset harga "${p.name}" ke mode AUTO?\n\nHarga jual akan dihitung ulang oleh sistem saat Sinkron Digiflazz berikutnya.`)) return;
-    await supabase
-      .from('sc_products')
-      .update({ price_mode: 'auto', updated_at: new Date().toISOString() })
-      .eq('id', p.id);
+    try { await adminApi('product_reset_mode', { id: p.id }); } catch { /* ignore */ }
     loadProducts();
   };
 
   /* ── Aktifkan / Nonaktifkan ── */
   const handleToggle = async (p: DbProduct) => {
-    await supabase
-      .from('sc_products')
-      .update({ active: !p.active, updated_at: new Date().toISOString() })
-      .eq('id', p.id);
+    try { await adminApi('product_toggle', { id: p.id, active: !p.active }); } catch { /* ignore */ }
     loadProducts();
   };
 
   /* ── Hapus ── */
   const handleDelete = async (p: DbProduct) => {
     if (!confirm(`Hapus produk "${p.name}"?`)) return;
-    await supabase.from('sc_products').delete().eq('id', p.id);
+    try { await adminApi('product_delete', { id: p.id }); } catch { /* ignore */ }
     loadProducts();
   };
 

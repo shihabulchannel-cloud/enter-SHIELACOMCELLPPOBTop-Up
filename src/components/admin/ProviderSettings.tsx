@@ -8,11 +8,22 @@ import {
   type ProviderPriority, logAction
 } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
+import { getAdminSession } from '@/lib/admin-auth';
 import { cn } from '@/lib/utils';
 
 // Auto-detect Supabase URL from client
 const SUPABASE_URL = (supabase as unknown as { supabaseUrl: string }).supabaseUrl
   || 'https://spb-t4n14k6xzom7uus1.supabase.opentrust.net';
+
+async function adminApiDigiflazz(data: Record<string, unknown>) {
+  const session = getAdminSession();
+  const { data: result, error } = await supabase.functions.invoke('admin-api', {
+    body: { action: 'digiflazz_save', payload: { data } },
+    headers: { Authorization: `Bearer ${session?.session_token ?? ''}` },
+  });
+  if (error) throw new Error(error.message);
+  if (result?.error) throw new Error(result.error);
+}
 
 const DIGIFLAZZ_WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/digiflazz-webhook`;
 
@@ -336,17 +347,17 @@ function DigiflazzSettings() {
   const handleSave = async () => {
     const all = providerConfigStore.get();
     providerConfigStore.set({ ...all, digiflazz: { ...cfg, enabled: true } });
-    const { error } = await supabase.from('sc_digiflazz_config').upsert({
-      provider: 'digiflazz',
-      username: cfg.username,
-      api_key: cfg.apiKey,
-      webhook_secret: '',
-      active: true,
-      testing,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'provider' });
-    if (error) {
-      alert(`Gagal simpan: ${error.message}`);
+    try {
+      await adminApiDigiflazz({
+        provider: 'digiflazz',
+        username: cfg.username,
+        api_key: cfg.apiKey,
+        webhook_secret: '',
+        active: true,
+        testing,
+      });
+    } catch (e) {
+      alert(`Gagal simpan: ${e instanceof Error ? e.message : 'Error'}`);
       return;
     }
     logAction('DIGIFLAZZ_SAVE', `Simpan konfigurasi Digiflazz, testing=${testing}`);
@@ -364,11 +375,10 @@ function DigiflazzSettings() {
     setShowRawLog(false);
     try {
       // Ensure config is saved before sync
-      await supabase.from('sc_digiflazz_config').upsert({
+      await adminApiDigiflazz({
         provider: 'digiflazz', username: cfg.username, api_key: cfg.apiKey,
         webhook_secret: '', active: true, testing,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'provider' });
+      });
 
       const { data, error } = await supabase.functions.invoke('sync-products');
       if (error) {

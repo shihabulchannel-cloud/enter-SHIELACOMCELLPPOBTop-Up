@@ -13,8 +13,35 @@ function respond(data: Record<string, unknown>, status = 200) {
   });
 }
 
+// ─── In-memory rate limiter ───────────────────────────────────────────────────
+const rl = new Map<string, { count: number; resetAt: number }>();
+
+function allowRequest(ip: string, maxReq: number, windowMs: number): boolean {
+  const now   = Date.now();
+  const entry = rl.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rl.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxReq) return false;
+  entry.count++;
+  return true;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Rate limit: max 3 upload per IP per 5 menit
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")
+    || "unknown";
+
+  if (!allowRequest(`submit-proof:${ip}`, 3, 5 * 60_000)) {
+    return respond(
+      { error: "Terlalu banyak percobaan upload. Silakan tunggu 5 menit." },
+      429,
+    );
+  }
 
   try {
     const supabase = createClient(
@@ -31,6 +58,11 @@ Deno.serve(async (req: Request) => {
     const allowedTypes = ["image/jpeg", "image/jpg", "image/png"];
     if (image_type && !allowedTypes.includes(image_type)) {
       return respond({ error: "Format file harus JPG atau PNG" }, 400);
+    }
+
+    // Batasi ukuran gambar (max ~2MB base64 ≈ ~1.5MB file)
+    if (image_base64.length > 2_800_000) {
+      return respond({ error: "Ukuran file terlalu besar (maksimum 2MB)" }, 400);
     }
 
     const { data: order } = await supabase

@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// ─── In-memory rate limiter (per instance) ───────────────────────────────────
+// Dibuat selain Cloudflare — efektif untuk burst protection
+const rl = new Map<string, { count: number; resetAt: number }>();
+
+function allowRequest(ip: string, maxReq: number, windowMs: number): boolean {
+  const now  = Date.now();
+  const entry = rl.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rl.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxReq) return false;
+  entry.count++;
+  return true;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function generateInvoiceId(): string {
   const now = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -29,13 +47,6 @@ async function hmacSha256(key: string, message: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
   return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function sha256(message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(message);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function createTripayTransaction(
@@ -114,8 +125,21 @@ function demoPay(method: string, invoiceId: string): { payment_code: string; pay
   };
 }
 
+// ─── Main ─────────────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Rate limit: max 8 order per IP per menit
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")
+    || "unknown";
+
+  if (!allowRequest(`create-order:${ip}`, 8, 60_000)) {
+    return new Response(
+      JSON.stringify({ error: "Terlalu banyak permintaan. Silakan tunggu sebentar dan coba lagi." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } },
+    );
+  }
 
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -124,6 +148,11 @@ Deno.serve(async (req: Request) => {
 
     if (!product_sku || !target || !buyer_name || !payment_method || !payment_gateway) {
       return new Response(JSON.stringify({ error: "Data tidak lengkap" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Validasi input dasar
+    if (typeof target !== "string" || target.length > 100) {
+      return new Response(JSON.stringify({ error: "Target tidak valid" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { data: product } = await supabase.from("sc_products").select("*").eq("sku", product_sku).eq("active", true).maybeSingle();

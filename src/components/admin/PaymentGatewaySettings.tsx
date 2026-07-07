@@ -5,15 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { logAction } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
+import { getAdminSession } from '@/lib/admin-auth';
 import { cn } from '@/lib/utils';
 
-// ─── DB helper ───────────────────────────────────────────────────────────────
+// ─── DB helper (via secure admin-api Edge Function) ──────────────────────────
 async function saveGatewayToDb(gateway: string, configJson: Record<string, unknown>, active: boolean) {
-  const { error } = await supabase.from('sc_payment_configs').upsert({
-    gateway, config_json: configJson, active,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'gateway' });
+  const session = getAdminSession();
+  const { data, error } = await supabase.functions.invoke('admin-api', {
+    body: { action: 'payment_save', payload: { data: { gateway, config_json: configJson, active } } },
+    headers: { Authorization: `Bearer ${session?.session_token ?? ''}` },
+  });
   if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
 }
 
 async function loadGatewayFromDb(gateway: string) {

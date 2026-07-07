@@ -1,0 +1,92 @@
+-- ============================================================
+-- SECURITY HARDENING
+-- ============================================================
+
+-- 1. Perketat RLS sc_products:
+--    Anon boleh SELECT produk aktif saja.
+--    Hanya service_role yang boleh INSERT / UPDATE / DELETE.
+--    (Admin panel harus pakai Edge Function untuk mutasi)
+
+DROP POLICY IF EXISTS "service_role_all_products" ON sc_products;
+
+CREATE POLICY "service_role_insert_products" ON sc_products
+  FOR INSERT TO service_role WITH CHECK (true);
+
+CREATE POLICY "service_role_update_products" ON sc_products
+  FOR UPDATE TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "service_role_delete_products" ON sc_products
+  FOR DELETE TO service_role USING (true);
+
+-- Anon tetap bisa SELECT (dibutuhkan website publik)
+-- Policy "public_read_active_products" sudah ada (active = true)
+
+-- 2. Perketat sc_payment_configs: hanya service_role
+DROP POLICY IF EXISTS "service_role_payment_configs" ON sc_payment_configs;
+
+CREATE POLICY "anon_read_payment_configs" ON sc_payment_configs
+  FOR SELECT TO anon USING (active = true);
+
+CREATE POLICY "service_role_mutate_payment_configs" ON sc_payment_configs
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- 3. Perketat sc_digiflazz_config: hanya service_role
+DROP POLICY IF EXISTS "service_role_digiflazz_config" ON sc_digiflazz_config;
+
+CREATE POLICY "service_role_only_digiflazz_config" ON sc_digiflazz_config
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- 4. Rate limit table — digunakan Edge Functions
+CREATE TABLE IF NOT EXISTS sc_rate_limits (
+  ip       text    NOT NULL,
+  endpoint text    NOT NULL,
+  count    integer NOT NULL DEFAULT 1,
+  win_start timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (ip, endpoint)
+);
+
+ALTER TABLE sc_rate_limits ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_rate_limits" ON sc_rate_limits
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Fungsi atomic untuk cek + increment rate limit
+CREATE OR REPLACE FUNCTION fn_rate_limit_check(
+  p_ip       text,
+  p_endpoint text,
+  p_max      integer,
+  p_window   integer  -- detik
+) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_count   integer;
+  v_win     timestamptz;
+  v_now     timestamptz := now();
+BEGIN
+  SELECT count, win_start INTO v_count, v_win
+  FROM sc_rate_limits
+  WHERE ip = p_ip AND endpoint = p_endpoint;
+
+  -- Belum ada record ATAU window sudah habis → reset
+  IF NOT FOUND OR v_now > v_win + (p_window || ' seconds')::interval THEN
+    INSERT INTO sc_rate_limits (ip, endpoint, count, win_start)
+    VALUES (p_ip, p_endpoint, 1, v_now)
+    ON CONFLICT (ip, endpoint) DO UPDATE
+      SET count = 1, win_start = v_now;
+    RETURN true;
+  END IF;
+
+  -- Melebihi batas
+  IF v_count >= p_max THEN
+    RETURN false;
+  END IF;
+
+  -- Increment
+  UPDATE sc_rate_limits SET count = count + 1
+  WHERE ip = p_ip AND endpoint = p_endpoint;
+  RETURN true;
+END;
+$$;
+
+-- Bersihkan record lama setiap hari (opsional, jalankan via cron jika perlu)
+CREATE INDEX IF NOT EXISTS idx_rate_limits_win ON sc_rate_limits (win_start);
