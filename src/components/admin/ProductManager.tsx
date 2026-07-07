@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { categoryStore, type Category } from '@/lib/store';
 import { cn } from '@/lib/utils';
 
 interface DbProduct {
@@ -22,19 +23,20 @@ interface DbProduct {
   updated_at: string;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  pulsa: 'Pulsa', data: 'Paket Data', game: 'Top Up Game',
-  ewallet: 'E-Wallet', pln: 'PLN / Token', ppob: 'PPOB / Tagihan', voucher: 'Voucher',
-};
+function useCategoryLabel(categories: Category[], categoryId: string): string {
+  return categories.find(c => c.id === categoryId)?.name ?? categoryId;
+}
 
-function ProductRow({ product, onEdit, onToggle, onDelete, onResetToAuto }: {
+function ProductRow({ product, categories, onEdit, onToggle, onDelete, onResetToAuto }: {
   product: DbProduct;
+  categories: Category[];
   onEdit: (p: DbProduct) => void;
   onToggle: (p: DbProduct) => void;
   onDelete: (p: DbProduct) => void;
   onResetToAuto: (p: DbProduct) => void;
 }) {
   const isManual = product.price_mode === 'manual';
+  const catLabel = useCategoryLabel(categories, product.category_id);
 
   return (
     <div className={cn(
@@ -45,7 +47,7 @@ function ProductRow({ product, onEdit, onToggle, onDelete, onResetToAuto }: {
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-semibold text-foreground text-sm truncate">{product.name}</p>
           <Badge className="text-xs bg-muted text-muted-foreground border-border">
-            {CATEGORY_LABELS[product.category_id] || product.category_id}
+            {catLabel}
           </Badge>
           <Badge className="text-xs bg-muted text-muted-foreground border-border">
             {product.brand || '-'}
@@ -112,8 +114,9 @@ function ProductRow({ product, onEdit, onToggle, onDelete, onResetToAuto }: {
   );
 }
 
-function ProductForm({ initial, onSave, onCancel }: {
+function ProductForm({ initial, categories, onSave, onCancel }: {
   initial?: Partial<DbProduct>;
+  categories: Category[];
   onSave: (data: Partial<DbProduct>) => void;
   onCancel: () => void;
 }) {
@@ -158,7 +161,7 @@ function ProductForm({ initial, onSave, onCancel }: {
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">Kategori</label>
           <select value={form.category_id} onChange={e => f('category_id')(e.target.value)} className="w-full h-9 rounded-xl border border-input bg-background px-3 text-sm">
-            {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
           </select>
         </div>
         <div>
@@ -207,12 +210,20 @@ function ProductForm({ initial, onSave, onCancel }: {
 
 export default function ProductManager() {
   const [products,     setProducts]     = useState<DbProduct[]>([]);
+  const [categories,   setCategories]   = useState<Category[]>([]);
   const [loading,      setLoading]      = useState(true);
+  const [saving,       setSaving]       = useState(false);
+  const [saveError,    setSaveError]    = useState('');
   const [adding,       setAdding]       = useState(false);
   const [editing,      setEditing]      = useState<DbProduct | null>(null);
   const [search,       setSearch]       = useState('');
   const [filterCat,    setFilterCat]    = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+
+  // Load categories from localStorage (CategoryManager)
+  useEffect(() => {
+    setCategories(categoryStore.get().filter(c => c.active));
+  }, []);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -230,9 +241,11 @@ export default function ProductManager() {
 
   /* ── Simpan perubahan produk ── */
   const handleSave = async (form: Partial<DbProduct>) => {
+    setSaving(true);
+    setSaveError('');
     if (editing) {
       // Edit produk yang sudah ada → kunci ke mode MANUAL
-      await supabase
+      const { error } = await supabase
         .from('sc_products')
         .update({
           ...form,
@@ -240,10 +253,15 @@ export default function ProductManager() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', editing.id);
+      if (error) {
+        setSaveError(`Gagal menyimpan: ${error.message}`);
+        setSaving(false);
+        return;
+      }
       setEditing(null);
     } else {
       // Tambah produk baru secara manual → langsung MANUAL
-      await supabase
+      const { error } = await supabase
         .from('sc_products')
         .insert({
           ...form,
@@ -252,8 +270,14 @@ export default function ProductManager() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
+      if (error) {
+        setSaveError(`Gagal menambah: ${error.message}`);
+        setSaving(false);
+        return;
+      }
       setAdding(false);
     }
+    setSaving(false);
     loadProducts();
   };
 
@@ -322,8 +346,15 @@ export default function ProductManager() {
         </div>
       </div>
 
-      {adding  && <ProductForm onSave={handleSave} onCancel={() => setAdding(false)} />}
-      {editing && <ProductForm initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />}
+      {adding  && <ProductForm categories={categories} onSave={handleSave} onCancel={() => setAdding(false)} />}
+      {editing && <ProductForm categories={categories} initial={editing} onSave={handleSave} onCancel={() => setEditing(null)} />}
+
+      {/* Save error message */}
+      {saveError && (
+        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+          {saveError}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -338,7 +369,7 @@ export default function ProductManager() {
         </div>
         <select value={filterCat} onChange={e => setFilterCat(e.target.value)} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
           <option value="">Semua Kategori</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
           <option value="">Semua Status</option>
@@ -358,7 +389,8 @@ export default function ProductManager() {
             <ProductRow
               key={product.id}
               product={product}
-              onEdit={setEditing}
+              categories={categories}
+              onEdit={p => { setEditing(p); setAdding(false); setSaveError(''); }}
               onToggle={handleToggle}
               onDelete={handleDelete}
               onResetToAuto={handleResetToAuto}
@@ -374,6 +406,14 @@ export default function ProductManager() {
               </p>
             </div>
           )}
+        </div>
+      )}
+      {saving && (
+        <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center">
+          <div className="bg-card rounded-2xl p-6 shadow-xl flex items-center gap-3">
+            <RefreshCw className="w-5 h-5 animate-spin text-primary" />
+            <span className="text-foreground font-medium">Menyimpan...</span>
+          </div>
         </div>
       )}
     </div>

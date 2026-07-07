@@ -13,7 +13,7 @@ import PromoSection from '@/components/products/PromoSection';
 import ProductGrid from '@/components/products/ProductGrid';
 import SubCategoryGrid from '@/components/products/SubCategoryGrid';
 import {
-  getCategoryBySlug,
+  getCategoryBySlugDynamic,
   slugToBrand,
   setCategoryMeta,
 } from '@/lib/product-slugs';
@@ -36,8 +36,8 @@ export default function ProductCatalog() {
   const [cmsLoading,  setCmsLoading]  = useState(false);
   const [cmsCatData,  setCmsCatData]  = useState<CmsCategory | null>(null);
 
-  // Resolve slug → metadata
-  const category = getCategoryBySlug(categorySlug ?? '');
+  // Resolve slug → metadata (includes custom categories from admin)
+  const category = getCategoryBySlugDynamic(categorySlug ?? '');
 
   // If invalid category slug → redirect
   useEffect(() => {

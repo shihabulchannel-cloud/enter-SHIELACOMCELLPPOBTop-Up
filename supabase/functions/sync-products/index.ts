@@ -132,35 +132,37 @@ Deno.serve(async (req: Request) => {
     // ─── STEP 4.5: Baca produk yang sudah ada untuk MEMPERTAHANKAN HARGA ────
     //
     // price_mode = 'auto'   → sell_price dihitung ulang (buy_price + margin lama)
-    // price_mode = 'manual' → sell_price TIDAK PERNAH diubah saat sync
+    // price_mode = 'manual' → sell_price DAN category_id TIDAK PERNAH diubah saat sync
     //
     log("STEP 4.5: Membaca data harga produk yang sudah ada...");
     const { data: existingRows, error: existingErr } = await supabase
       .from("sc_products")
-      .select("sku, buy_price, sell_price, price_mode");
+      .select("sku, buy_price, sell_price, price_mode, category_id");
 
     if (existingErr) {
       log(`WARNING: Gagal membaca produk lama (${existingErr.message}) — menggunakan default +1000`);
     }
 
-    // Map: sku → { sell_price, buy_price, price_mode }
+    // Map: sku → { sell_price, buy_price, price_mode, category_id }
     interface ExistingProduct {
       sell_price: number;
       buy_price: number;
       price_mode: string;
+      category_id: string;
     }
     const existingMap = new Map<string, ExistingProduct>();
     let manualCount = 0;
     for (const row of existingRows || []) {
       const mode = row.price_mode ?? 'auto';
       existingMap.set(row.sku, {
-        sell_price: row.sell_price ?? 0,
-        buy_price:  row.buy_price  ?? 0,
-        price_mode: mode,
+        sell_price:  row.sell_price  ?? 0,
+        buy_price:   row.buy_price   ?? 0,
+        price_mode:  mode,
+        category_id: row.category_id ?? '',
       });
       if (mode === 'manual') manualCount++;
     }
-    log(`OK: ${existingMap.size} produk lama dibaca (${manualCount} mode MANUAL → harga dikunci)`);
+    log(`OK: ${existingMap.size} produk lama dibaca (${manualCount} mode MANUAL → harga & kategori dikunci)`);
     // ─────────────────────────────────────────────────────────────────────────
 
     log("STEP 5: Menyimpan ke database (batch 100) dengan proteksi harga manual...");
@@ -187,7 +189,7 @@ Deno.serve(async (req: Request) => {
             priceMode    = 'auto';
 
           } else if (existing.price_mode === 'manual') {
-            // HARGA MANUAL → sell_price TIDAK DIUBAH sama sekali
+            // HARGA MANUAL → sell_price DAN category_id TIDAK DIUBAH sama sekali
             newSellPrice = existing.sell_price;
             priceMode    = 'manual';
             manualProtected++;
@@ -202,10 +204,15 @@ Deno.serve(async (req: Request) => {
           }
           // ─────────────────────────────────────────────────────────────────
 
+          // Untuk produk manual, pertahankan category_id yang sudah di-set admin
+          const categoryId = (existing && existing.price_mode === 'manual' && existing.category_id)
+            ? existing.category_id
+            : mapCategory(String(p.category || ""));
+
           return {
             sku,
             name:          String(p.product_name),
-            category_id:   mapCategory(String(p.category || "")),
+            category_id:   categoryId,
             brand:         String(p.brand || ""),
             buy_price:     newBuyPrice,
             sell_price:    newSellPrice,

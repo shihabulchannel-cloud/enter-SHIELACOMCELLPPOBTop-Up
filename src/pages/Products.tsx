@@ -8,6 +8,7 @@ import Footer from '@/components/layout/Footer';
 import WhatsAppFloat from '@/components/layout/WhatsAppFloat';
 import ProductGrid from '@/components/products/ProductGrid';
 import { CATEGORIES, setCategoryMeta } from '@/lib/product-slugs';
+import { categoryStore, type Category } from '@/lib/store';
 import { getProductsFromDB } from '@/lib/order-api';
 import { getCmsTopCategories, type CmsCategory } from '@/lib/cms-api';
 import { cn } from '@/lib/utils';
@@ -15,14 +16,22 @@ import type { ProductItem } from '@/components/products/ProductCard';
 
 export default function Products() {
   const navigate = useNavigate();
-  const [search,    setSearch]    = useState('');
-  const [results,   setResults]   = useState<ProductItem[]>([]);
-  const [loading,   setLoading]   = useState(false);
-  const [searched,  setSearched]  = useState(false);
-  const [cmsTopCats, setCmsTopCats] = useState<CmsCategory[]>([]);
+  const [search,      setSearch]      = useState('');
+  const [results,     setResults]     = useState<ProductItem[]>([]);
+  const [loading,     setLoading]     = useState(false);
+  const [searched,    setSearched]    = useState(false);
+  const [cmsTopCats,  setCmsTopCats]  = useState<CmsCategory[]>([]);
+  const [customCats,  setCustomCats]  = useState<Category[]>([]);
 
   // Page SEO
   useEffect(() => { setCategoryMeta(null, null); }, []);
+
+  // Load custom categories from admin's CategoryManager (localStorage)
+  useEffect(() => {
+    const builtinIds = new Set(CATEGORIES.map(c => c.id));
+    const all = categoryStore.get().filter(c => c.active && !builtinIds.has(c.id));
+    setCustomCats(all);
+  }, []);
 
   // Fetch CMS top-level category thumbnails
   useEffect(() => {
@@ -159,6 +168,28 @@ export default function Products() {
                     </Link>
                   );
                 })}
+
+                {/* Custom categories created by admin */}
+                {customCats.map(cat => (
+                  <Link
+                    key={cat.id}
+                    to={`/products/${cat.id}`}
+                    className="group relative block overflow-hidden rounded-2xl aspect-square shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300"
+                  >
+                    <div className={cn('absolute inset-0 bg-gradient-to-br', cat.color)}>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Search className="w-16 h-16 text-white/20" />
+                      </div>
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3">
+                      <h3 className="text-white font-bold text-sm leading-tight drop-shadow-sm">
+                        {cat.name}
+                      </h3>
+                    </div>
+                    <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/5" />
+                  </Link>
+                ))}
               </div>
             </div>
           </section>

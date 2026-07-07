@@ -16,6 +16,40 @@ function set<T>(key: string, value: T) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+/** Convert any text to a URL-safe slug (e.g. "AKTIVASI PERDANA" → "aktivasi-perdana") */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** Returns true if id looks like a slug (lowercase letters, digits, hyphens only) */
+function isSlugId(id: string): boolean {
+  return /^[a-z0-9-]+$/.test(id);
+}
+
+/** Migrate old random-UID category IDs to slugified versions */
+function migrateCategories(cats: Category[]): { cats: Category[]; changed: boolean } {
+  const usedIds = new Set(cats.filter(c => isSlugId(c.id)).map(c => c.id));
+  let changed = false;
+  const result = cats.map(c => {
+    if (isSlugId(c.id)) return c;
+    const base = slugify(c.name);
+    if (!base) return c;
+    let id = base;
+    let counter = 2;
+    while (usedIds.has(id)) id = `${base}-${counter++}`;
+    usedIds.add(id);
+    changed = true;
+    return { ...c, id };
+  });
+  return { cats: result, changed };
+}
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -443,11 +477,20 @@ export const bannerStore = {
 
 // Category store
 export const categoryStore = {
-  get: (): Category[] => get('sc_categories', D_CATEGORIES),
+  get: (): Category[] => {
+    const raw = get<Category[]>('sc_categories', D_CATEGORIES);
+    const { cats, changed } = migrateCategories(raw);
+    if (changed) set('sc_categories', cats);
+    return cats;
+  },
   set: (v: Category[]) => { set('sc_categories', v); notifyUpdate('categories'); },
   add: (c: Omit<Category, 'id'>) => {
     const all = categoryStore.get();
-    const n = { ...c, id: uid() };
+    const base = slugify(c.name) || uid();
+    let id = base;
+    let counter = 2;
+    while (all.some(x => x.id === id)) id = `${base}-${counter++}`;
+    const n = { ...c, id };
     categoryStore.set([...all, n]);
     logAction('CATEGORY_ADD', `Menambah kategori: ${c.name}`);
     return n;

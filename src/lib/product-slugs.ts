@@ -1,5 +1,6 @@
 import { Smartphone, Wifi, Gamepad2, Wallet, Zap, FileText, Tag } from 'lucide-react';
 import type { ElementType } from 'react';
+import { categoryStore } from '@/lib/store';
 
 // ============================================================
 // CATEGORY METADATA — single source of truth for product pages
@@ -133,6 +134,32 @@ CATEGORIES.forEach(c => { BY_ID[c.id] = c; BY_SLUG[c.slug] = c; });
 export function getCategoryById(id: string):     CategoryMeta | null { return BY_ID[id]   ?? null; }
 export function getCategoryBySlug(slug: string): CategoryMeta | null { return BY_SLUG[slug] ?? null; }
 export function categoryToSlug(id: string):      string              { return BY_ID[id]?.slug ?? id; }
+
+/**
+ * Dynamic lookup: checks built-in CATEGORIES first, then custom categories
+ * stored in localStorage (categoryStore). Supports categories created by admin.
+ */
+export function getCategoryBySlugDynamic(slug: string): CategoryMeta | null {
+  // Built-in categories take priority
+  const builtin = getCategoryBySlug(slug);
+  if (builtin) return builtin;
+
+  // Check custom categories from admin's CategoryManager
+  const stored = categoryStore.get().find(c => c.id === slug && c.active);
+  if (!stored) return null;
+
+  return {
+    id:          stored.id,
+    slug:        stored.id,
+    label:       stored.name,
+    description: stored.name,
+    icon:        Tag,
+    gradient:    stored.color,
+    seoTitle:    `${stored.name} | SHIELACOM CELL`,
+    seoDesc:     stored.name,
+    faq:         [],
+  };
+}
 
 // ============================================================
 // BRAND SLUG UTILITIES
