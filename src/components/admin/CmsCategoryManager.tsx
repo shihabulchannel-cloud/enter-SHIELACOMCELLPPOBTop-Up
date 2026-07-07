@@ -14,7 +14,8 @@ import {
   type CmsCategory, type CmsMedia, type CmsCategoryInput,
 } from '@/lib/cms-api';
 import { CATEGORIES } from '@/lib/product-slugs';
-import { triggerFileInput } from '@/lib/image-upload';
+import { useImageCrop } from '@/hooks/useImageCrop';
+import type { ImagePresetKey } from '@/components/admin/ImageCropModal';
 
 // ============================================================
 // TAB
@@ -22,8 +23,17 @@ import { triggerFileInput } from '@/lib/image-upload';
 type Tab = 'top' | 'sub' | 'media';
 
 // ============================================================
-// IMAGE UPLOAD BUTTON
+// SMART IMAGE UPLOAD — with crop modal
 // ============================================================
+type Folder = 'thumbnails' | 'banners' | 'icons' | 'backgrounds';
+
+const FOLDER_TO_PRESET: Record<Folder, ImagePresetKey> = {
+  thumbnails:  'thumbnail',
+  banners:     'banner',
+  icons:       'logo',
+  backgrounds: 'thumbnail',
+};
+
 function ImageUpload({
   label,
   value,
@@ -32,29 +42,18 @@ function ImageUpload({
 }: {
   label:      string;
   value:      string;
-  folder:     'thumbnails' | 'banners' | 'icons' | 'backgrounds';
+  folder:     Folder;
   onUploaded: (url: string) => void;
 }) {
-  const [uploading, setUploading] = useState(false);
-  const [error,     setError]     = useState('');
-
-  const handleUpload = () => {
-    triggerFileInput(async (file) => {
-      setUploading(true);
-      setError('');
-      try {
-        const { url } = await uploadToStorage(file, folder);
-        onUploaded(url);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Upload gagal');
-      } finally {
-        setUploading(false);
-      }
-    });
-  };
+  const { triggerCrop, cropModal, uploading, error } = useImageCrop({
+    preset: FOLDER_TO_PRESET[folder],
+    folder,
+    onUrl: onUploaded,
+  });
 
   return (
     <div>
+      {cropModal}
       <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{label}</label>
       <div className="flex items-start gap-3">
         {/* Preview */}
@@ -76,7 +75,7 @@ function ImageUpload({
             type="button"
             size="sm"
             variant="outline"
-            onClick={handleUpload}
+            onClick={triggerCrop}
             disabled={uploading}
             className="rounded-xl gap-1.5 text-xs h-8"
           >

@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { bannerStore, type Banner, logAction } from '@/lib/store';
-import { readFileAsDataUrl, triggerFileInput } from '@/lib/image-upload';
 import { cn } from '@/lib/utils';
+import { useImageCrop } from '@/hooks/useImageCrop';
 
 type BannerTheme = Banner['theme'];
 
@@ -25,23 +25,16 @@ function BannerForm({
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<Omit<Banner, 'id'>>({ ...EMPTY_FORM(), ...initial });
-  const [imgError, setImgError] = useState('');
   const f = (k: keyof typeof form) => (v: string | boolean) => setForm(p => ({ ...p, [k]: v }));
 
-  const handleImgUpload = () => {
-    triggerFileInput(async (file) => {
-      try {
-        const dataUrl = await readFileAsDataUrl(file);
-        setForm(p => ({ ...p, imageDataUrl: dataUrl }));
-        setImgError('');
-      } catch (e: unknown) {
-        setImgError(e instanceof Error ? e.message : 'Upload gagal');
-      }
-    });
-  };
+  const { triggerCrop, cropModal, uploading: imgUploading, error: imgError } = useImageCrop({
+    preset:   'hero_slide',
+    onBase64: (dataUrl) => setForm(p => ({ ...p, imageDataUrl: dataUrl })),
+  });
 
   return (
     <div className="bg-card border border-border rounded-2xl p-5 space-y-4 animate-scale-in">
+      {cropModal}
       {/* Image Upload */}
       <div>
         <label className="text-sm font-medium text-foreground block mb-2">Gambar Banner</label>
@@ -57,10 +50,10 @@ function BannerForm({
             )}
           </div>
           <div>
-            <Button onClick={handleImgUpload} size="sm" variant="outline" className="rounded-xl gap-2 mb-2">
+            <Button onClick={triggerCrop} disabled={imgUploading} size="sm" variant="outline" className="rounded-xl gap-2 mb-2">
               <Upload className="w-4 h-4" /> Upload Gambar
             </Button>
-            <p className="text-xs text-muted-foreground">JPG, PNG, WEBP. Maks 2MB.</p>
+            <p className="text-xs text-muted-foreground">JPG, PNG, WEBP — crop otomatis 16:9.</p>
             {imgError && <p className="text-red-500 text-xs mt-1">{imgError}</p>}
           </div>
         </div>

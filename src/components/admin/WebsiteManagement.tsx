@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, Upload, Globe, FileText, Twitter } from 'lucide-react';
+import { Save, Globe, FileText, Twitter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -7,8 +7,8 @@ import {
   siteSettingsStore, socialMediaStore, seoStore, cmsStore,
   type SiteSettings, type SocialMedia, type SeoSettings, type CmsContent, logAction
 } from '@/lib/store';
-import { readFileAsDataUrl, triggerFileInput } from '@/lib/image-upload';
 import { cn } from '@/lib/utils';
+import { useImageCrop } from '@/hooks/useImageCrop';
 
 type SubSection = 'general' | 'logo' | 'cms' | 'footer' | 'seo' | 'social';
 
@@ -95,24 +95,18 @@ function GeneralSettings() {
 function LogoManager() {
   const [settings, setSettings] = useState<SiteSettings>(siteSettingsStore.get());
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleUpload = () => {
-    triggerFileInput(async (file) => {
-      try {
-        const dataUrl = await readFileAsDataUrl(file);
-        const updated = { ...settings, logoDataUrl: dataUrl };
-        setSettings(updated);
-        siteSettingsStore.set(updated);
-        logAction('LOGO_UPLOAD', 'Upload logo baru');
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Upload gagal');
-        setTimeout(() => setError(''), 3000);
-      }
-    });
-  };
+  const { triggerCrop, cropModal, uploading, error } = useImageCrop({
+    preset:   'logo',
+    onBase64: (dataUrl) => {
+      const updated = { ...settings, logoDataUrl: dataUrl };
+      setSettings(updated);
+      siteSettingsStore.set(updated);
+      logAction('LOGO_UPLOAD', 'Upload logo baru');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    },
+  });
 
   const handleRemove = () => {
     const updated = { ...settings, logoDataUrl: '' };
@@ -123,6 +117,7 @@ function LogoManager() {
 
   return (
     <div>
+      {cropModal}
       <SectionHeader title="Logo Website" desc="Upload logo untuk ditampilkan di header dan footer" />
       <div className="bg-card border border-border rounded-2xl p-5">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
@@ -138,10 +133,10 @@ function LogoManager() {
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground mb-2">Format: PNG, SVG, WEBP</p>
-            <p className="text-xs text-muted-foreground mb-4">Rekomendasi ukuran: 200x60px. Maksimal 2MB.</p>
+            <p className="text-xs text-muted-foreground mb-4">Crop 1:1 · Output 200×200 px WebP.</p>
             <div className="flex gap-2 flex-wrap">
-              <Button onClick={handleUpload} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-2 btn-glow">
-                <Upload className="w-4 h-4" /> Upload Logo
+              <Button onClick={triggerCrop} disabled={uploading} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-2 btn-glow">
+                {uploading ? 'Memproses...' : 'Upload Logo'}
               </Button>
               {settings.logoDataUrl && (
                 <Button onClick={handleRemove} size="sm" variant="outline" className="rounded-xl text-destructive border-destructive/30 hover:bg-destructive/10">
