@@ -31,13 +31,17 @@ export default function CategoryBanner({
       {/* CMS Banner Image (jika ada) */}
       {cmsbannerUrl && (
         <div className="absolute inset-0 z-0">
-          <img
-            src={cmsbannerUrl}
-            alt={title}
-            className="w-full h-full object-cover"
-            loading="eager"
+          {/* background-size: 100% auto → lebar banner penuh, tidak terpotong kiri/kanan */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage:    `url(${cmsbannerUrl})`,
+              backgroundSize:     '100% auto',
+              backgroundPosition: 'center top',
+              backgroundRepeat:   'no-repeat',
+            }}
           />
-          {/* Emerald-tinted overlay — ringan agar detail banner tetap terlihat */}
+          {/* Emerald-tinted overlay */}
           <div
             className="absolute inset-0"
             style={{
