@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -56,8 +56,11 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   // 1. Validasi JWT admin
-  const authHeader = req.headers.get("Authorization") || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  // PENTING: token admin custom dibaca dari header X-Admin-Token, BUKAN Authorization.
+  // Header Authorization dipakai gateway platform untuk kredensial proyek (anon/service key)
+  // yang otomatis disisipkan oleh Supabase client SDK — jika ditimpa dengan JWT custom,
+  // gateway menolak request SEBELUM sampai ke kode ini ("non-2xx status code").
+  const token = req.headers.get("X-Admin-Token") || "";
   if (!token) return respond({ error: "Unauthorized: token tidak ada" }, 401);
 
   const jwtSecret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

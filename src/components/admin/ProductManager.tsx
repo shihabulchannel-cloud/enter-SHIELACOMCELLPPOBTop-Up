@@ -8,12 +8,15 @@ import { categoryStore, type Category } from '@/lib/store';
 import { getAdminSession } from '@/lib/admin-auth';
 import { cn } from '@/lib/utils';
 
-/** Panggil admin-api Edge Function dengan validasi JWT admin */
+/** Panggil admin-api Edge Function dengan validasi JWT admin.
+ *  Token dikirim via header X-Admin-Token (BUKAN Authorization) agar tidak
+ *  bentrok dengan header Authorization yang dipakai gateway platform untuk
+ *  kredensial proyek (anon key) yang otomatis disisipkan oleh Supabase SDK. */
 async function adminApi(action: string, payload: Record<string, unknown>) {
   const session = getAdminSession();
   const { data, error } = await supabase.functions.invoke('admin-api', {
     body: { action, payload },
-    headers: { Authorization: `Bearer ${session?.session_token ?? ''}` },
+    headers: { 'X-Admin-Token': session?.session_token ?? '' },
   });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);

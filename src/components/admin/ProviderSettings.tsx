@@ -17,9 +17,12 @@ const SUPABASE_URL = (supabase as unknown as { supabaseUrl: string }).supabaseUr
 
 async function adminApiDigiflazz(data: Record<string, unknown>) {
   const session = getAdminSession();
+  // Token admin dikirim via header X-Admin-Token (BUKAN Authorization) agar tidak
+  // bentrok dengan header Authorization yang dipakai gateway platform untuk
+  // kredensial proyek (anon key) yang otomatis disisipkan oleh Supabase SDK.
   const { data: result, error } = await supabase.functions.invoke('admin-api', {
     body: { action: 'digiflazz_save', payload: { data } },
-    headers: { Authorization: `Bearer ${session?.session_token ?? ''}` },
+    headers: { 'X-Admin-Token': session?.session_token ?? '' },
   });
   if (error) throw new Error(error.message);
   if (result?.error) throw new Error(result.error);

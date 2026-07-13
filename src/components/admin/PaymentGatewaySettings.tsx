@@ -9,11 +9,14 @@ import { getAdminSession } from '@/lib/admin-auth';
 import { cn } from '@/lib/utils';
 
 // ─── DB helper (via secure admin-api Edge Function) ──────────────────────────
+// Token admin dikirim via header X-Admin-Token (BUKAN Authorization) agar tidak
+// bentrok dengan header Authorization yang dipakai gateway platform untuk
+// kredensial proyek (anon key) yang otomatis disisipkan oleh Supabase SDK.
 async function saveGatewayToDb(gateway: string, configJson: Record<string, unknown>, active: boolean) {
   const session = getAdminSession();
   const { data, error } = await supabase.functions.invoke('admin-api', {
     body: { action: 'payment_save', payload: { data: { gateway, config_json: configJson, active } } },
-    headers: { Authorization: `Bearer ${session?.session_token ?? ''}` },
+    headers: { 'X-Admin-Token': session?.session_token ?? '' },
   });
   if (error) throw new Error(error.message);
   if (data?.error) throw new Error(data.error);
