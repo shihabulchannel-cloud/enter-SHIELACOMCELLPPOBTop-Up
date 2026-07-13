@@ -1,0 +1,4 @@
+UPDATE sc_payment_configs
+SET config_json = jsonb_set(config_json, '{sandbox}', '"true"'),
+    updated_at = now()
+WHERE gateway = 'duitku';

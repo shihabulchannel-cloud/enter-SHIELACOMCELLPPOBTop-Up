@@ -3,6 +3,7 @@ import { Save, Wifi, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { logAction } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { getAdminSession } from '@/lib/admin-auth';
@@ -63,7 +64,7 @@ function DuitkuSettings() {
   const [cfg, setCfg] = useState({
     merchantCode: '', apiKey: '',
     callbackUrl: DUITKU_DEFAULT_CALLBACK_URL, returnUrl: DUITKU_DEFAULT_RETURN_URL,
-    enabled: false,
+    sandbox: true, enabled: false,
   });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -81,6 +82,7 @@ function DuitkuSettings() {
           apiKey: j.api_key || '',
           callbackUrl: j.callback_url || DUITKU_DEFAULT_CALLBACK_URL,
           returnUrl: j.return_url || DUITKU_DEFAULT_RETURN_URL,
+          sandbox: j.sandbox !== 'false',
           enabled: data.active,
         });
       }
@@ -97,10 +99,10 @@ function DuitkuSettings() {
       await saveGatewayToDb('duitku', {
         merchant_code: cfg.merchantCode, api_key: cfg.apiKey,
         callback_url: cfg.callbackUrl, return_url: cfg.returnUrl,
-        sandbox: 'false',
+        sandbox: cfg.sandbox ? 'true' : 'false',
       }, true);
       f('enabled')(true);
-      logAction('DUITKU_SAVE', 'Simpan konfigurasi Duitku — aktif dari database');
+      logAction('DUITKU_SAVE', `Simpan konfigurasi Duitku — mode ${cfg.sandbox ? 'Sandbox' : 'Production'}`);
       setSaved(true); setTimeout(() => setSaved(false), 3000);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e));
@@ -110,7 +112,7 @@ function DuitkuSettings() {
   const handleDeactivate = async () => {
     setSaving(true);
     try {
-      await saveGatewayToDb('duitku', { merchant_code: cfg.merchantCode, api_key: cfg.apiKey }, false);
+      await saveGatewayToDb('duitku', { merchant_code: cfg.merchantCode, api_key: cfg.apiKey, sandbox: cfg.sandbox ? 'true' : 'false' }, false);
       f('enabled')(false);
     } finally { setSaving(false); }
   };
@@ -131,7 +133,9 @@ function DuitkuSettings() {
       {cfg.enabled && (
         <div className="flex items-center gap-2 p-3 bg-green-500/5 border border-green-500/20 rounded-xl">
           <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
-          <p className="text-sm text-green-700 font-medium">Duitku aktif dan tersimpan di database. Transaksi akan menggunakan konfigurasi ini secara otomatis.</p>
+          <p className="text-sm text-green-700 font-medium">
+            Duitku aktif dan tersimpan di database — mode <strong>{cfg.sandbox ? 'Sandbox' : 'Production'}</strong>. Transaksi akan menggunakan konfigurasi ini secara otomatis.
+          </p>
         </div>
       )}
 
@@ -140,6 +144,25 @@ function DuitkuSettings() {
           <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
         ) : (
           <>
+            {/* Sandbox / Production toggle — WAJIB sesuai dengan jenis kredensial yang diisi */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-border">
+              <div>
+                <p className="text-sm font-medium text-foreground">Mode {cfg.sandbox ? 'Sandbox' : 'Production'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {cfg.sandbox
+                    ? 'Endpoint: sandbox.duitku.com — gunakan Merchant Code & API Key Sandbox.'
+                    : 'Endpoint: passport.duitku.com — gunakan Merchant Code & API Key Production asli.'}
+                </p>
+              </div>
+              <Switch checked={cfg.sandbox} onCheckedChange={(v) => f('sandbox')(v)} />
+            </div>
+            {cfg.sandbox && (
+              <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-700">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>Mode Sandbox aktif — transaksi tidak akan memotong saldo nyata. Matikan toggle di atas saat go-live dengan kredensial Production.</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <GwField label="Merchant Code" value={cfg.merchantCode} onChange={f('merchantCode')} placeholder="D1234" />
               <GwField label="API Key" value={cfg.apiKey} onChange={f('apiKey')} type="password" placeholder="API key Duitku" />

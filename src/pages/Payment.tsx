@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Copy, Check, Clock, RefreshCw, AlertCircle, CheckCircle2, XCircle, Smartphone, Building2, QrCode, Loader2, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -478,17 +479,26 @@ export default function PaymentPage() {
                   </div>
                 )}
 
-                {/* QRIS */}
+                {/* QRIS — render QR code sungguhan dari qrString Duitku (tersimpan di payment_code) */}
                 {methodType === 'qris' && (
                   <div className="text-center">
                     <p className="text-sm text-muted-foreground mb-3">Scan QR Code untuk membayar</p>
-                    <div className="w-48 h-48 mx-auto rounded-xl bg-muted border border-border flex items-center justify-center">
-                      <QrCode className="w-24 h-24 text-muted-foreground/30" />
-                    </div>
+                    {displayData?.payment_code ? (
+                      <div className="inline-block p-4 rounded-xl bg-white border border-border">
+                        <QRCodeSVG value={displayData.payment_code} size={192} level="M" />
+                      </div>
+                    ) : (
+                      <div className="w-48 h-48 mx-auto rounded-xl bg-muted border border-border flex items-center justify-center">
+                        <QrCode className="w-24 h-24 text-muted-foreground/30" />
+                      </div>
+                    )}
                     {displayData?.payment_url && (
                       <Button asChild className="mt-3 bg-primary text-white btn-glow rounded-xl w-full">
                         <a href={displayData.payment_url} target="_blank" rel="noopener noreferrer">Buka Halaman Pembayaran</a>
                       </Button>
+                    )}
+                    {!displayData?.payment_code && !displayData?.payment_url && (
+                      <p className="text-muted-foreground text-sm mt-3">Menunggu QR Code dari gateway...</p>
                     )}
                   </div>
                 )}

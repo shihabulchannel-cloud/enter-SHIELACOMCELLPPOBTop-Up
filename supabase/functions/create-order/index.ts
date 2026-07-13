@@ -40,6 +40,22 @@ function getPaymentFee(method: string): number {
   return PAYMENT_FEES[method] || 0;
 }
 
+// Kode payment method internal kita (dipakai untuk UI/DB) → kode resmi Duitku.
+// Diverifikasi langsung terhadap Duitku Sandbox API (getpaymentmethod & v2/inquiry):
+// kode ini BUKAN sama dengan nama umum (mis. "SHOPEEPAY" ditolak Duitku dengan
+// "Payment channel not available" — kode yang benar adalah "SA").
+const DUITKU_METHOD_CODE: Record<string, string> = {
+  QRIS: "NQ",        // Nobu QRIS — QRIS generik lintas-app
+  BCAVA: "BC",
+  BRIVA: "BR",
+  MANDIRIVA: "M2",
+  BNIVA: "I1",
+  PERMATAVA: "BT",
+  OVO: "OV",
+  DANA: "DA",
+  SHOPEEPAY: "SA",
+};
+
 async function hmacSha256(key: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(key);
@@ -96,13 +112,18 @@ async function createDuitkuTransaction(
   const siteUrl = Deno.env.get("SITE_URL") || "https://shielacomcell.my.id";
   const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/payment-webhook?gateway=duitku`;
 
+  // Terjemahkan kode payment method internal kita (mis. "BCAVA") ke kode resmi
+  // Duitku (mis. "BC"). Sudah diverifikasi langsung terhadap Duitku Sandbox API —
+  // mengirim kode internal apa adanya akan ditolak dengan "Payment channel not available".
+  const duitkuMethod = DUITKU_METHOD_CODE[order.payment_method] || order.payment_method;
+
   const res = await fetch(`${baseUrl}/api/merchant/v2/inquiry`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       merchantCode: config.merchant_code,
       paymentAmount: order.amount,
-      paymentMethod: order.payment_method,
+      paymentMethod: duitkuMethod,
       merchantOrderId: order.invoice_id,
       productDetails: order.product_name,
       additionalParam: "",
@@ -117,7 +138,9 @@ async function createDuitkuTransaction(
     }),
   });
   const data = await res.json();
-  if (!data.paymentUrl) throw new Error(data.Message || data.statusMessage || "Duitku error");
+  console.log(`[create-order] Duitku response (method=${duitkuMethod}):`, JSON.stringify(data));
+  if (!data.paymentUrl) throw new Error(data.Message || data.statusMessage || `Duitku error (HTTP ${res.status})`);
+  // payment_code: VA number untuk metode VA, atau qrString mentah untuk QRIS (fallback tampilan)
   return { payment_code: data.vaNumber || data.qrString || "", payment_url: data.paymentUrl || "" };
 }
 

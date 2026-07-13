@@ -1,0 +1,1 @@
+DELETE FROM sc_orders WHERE invoice_id = 'INV-20260713-BBX11N';
