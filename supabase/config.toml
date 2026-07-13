@@ -1,1 +1,16 @@
 project_id = "spb-t4n14k6xzom7uus1"
+
+# ─── Functions yang HARUS bisa diakses tanpa JWT Supabase ───────────────────
+# admin-api      : menggunakan skema JWT custom sendiri (verifyAdminJWT), bukan JWT Supabase.
+#                  Jika verify_jwt=true, gateway menolak token custom ini SEBELUM sampai ke kode.
+# payment-webhook: dipanggil server-to-server oleh Duitku/Tripay/iPaymu — pihak eksternal
+#                  tidak pernah memiliki API key Supabase kita.
+# digiflazz-webhook: dipanggil server-to-server oleh Digiflazz — sama seperti di atas.
+[functions.admin-api]
+verify_jwt = false
+
+[functions.payment-webhook]
+verify_jwt = false
+
+[functions.digiflazz-webhook]
+verify_jwt = false
