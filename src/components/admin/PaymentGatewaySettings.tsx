@@ -52,8 +52,16 @@ function GwStatusBadge({ active, loading }: { active: boolean; loading: boolean 
 }
 
 // ─── DUITKU ──────────────────────────────────────────────────────────────────
+// URL backend (Enter Cloud) & domain toko — dipakai sebagai default Callback/Return URL
+const DUITKU_DEFAULT_CALLBACK_URL = 'https://spb-t4n14k6xzom7uus1.supabase.opentrust.net/functions/v1/payment-webhook?gateway=duitku';
+const DUITKU_DEFAULT_RETURN_URL = 'https://shielacomcell.my.id/order-status';
+
 function DuitkuSettings() {
-  const [cfg, setCfg] = useState({ merchantCode: '', apiKey: '', callbackUrl: '', returnUrl: '', enabled: false });
+  const [cfg, setCfg] = useState({
+    merchantCode: '', apiKey: '',
+    callbackUrl: DUITKU_DEFAULT_CALLBACK_URL, returnUrl: DUITKU_DEFAULT_RETURN_URL,
+    enabled: false,
+  });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dbLoading, setDbLoading] = useState(true);
@@ -68,8 +76,8 @@ function DuitkuSettings() {
         setCfg({
           merchantCode: j.merchant_code || '',
           apiKey: j.api_key || '',
-          callbackUrl: j.callback_url || '',
-          returnUrl: j.return_url || '',
+          callbackUrl: j.callback_url || DUITKU_DEFAULT_CALLBACK_URL,
+          returnUrl: j.return_url || DUITKU_DEFAULT_RETURN_URL,
           enabled: data.active,
         });
       }
