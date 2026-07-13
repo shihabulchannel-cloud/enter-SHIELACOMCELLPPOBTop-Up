@@ -162,7 +162,16 @@ export default function ImageCropModal({
   const previewH = Math.round(previewW / cfg.ratio);
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background/95 backdrop-blur-md">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col bg-background/95 backdrop-blur-md overflow-hidden"
+      style={{
+        height: '100dvh',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+      }}
+    >
 
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card flex-shrink-0">
@@ -184,10 +193,10 @@ export default function ImageCropModal({
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
+      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row min-h-0">
 
-        {/* LEFT: Crop Editor */}
-        <div className="relative flex-1 min-h-[260px] lg:min-h-0 bg-zinc-900">
+        {/* LEFT: Crop Editor — fixed height on mobile so it never pushes buttons off-screen, flex-1 on desktop */}
+        <div className="relative flex-none h-[42vh] min-h-[180px] max-h-[48vh] lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1 bg-zinc-900">
           {imageSrc && (
             <Cropper
               image={imageSrc}
@@ -212,113 +221,118 @@ export default function ImageCropModal({
           </div>
         </div>
 
-        {/* RIGHT: Controls + Preview */}
-        <div className="flex flex-col w-full lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l border-border bg-card overflow-y-auto flex-shrink-0">
+        {/* RIGHT: Controls + Preview — takes remaining space, action buttons always pinned & visible */}
+        <div className="flex flex-col flex-1 min-h-0 w-full lg:flex-none lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l border-border bg-card overflow-hidden">
 
-          {/* Controls */}
-          <div className="p-4 border-b border-border space-y-4">
-            {/* Zoom */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-muted-foreground">Zoom</span>
-                <span className="text-xs text-muted-foreground">{zoom.toFixed(2)}×</span>
+          {/* Scrollable: Controls + Live Preview */}
+          <div className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
+
+            {/* Controls */}
+            <div className="p-4 border-b border-border space-y-4">
+              {/* Zoom */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">Zoom</span>
+                  <span className="text-xs text-muted-foreground">{zoom.toFixed(2)}×</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="icon" variant="outline" className="h-7 w-7 rounded-lg flex-shrink-0"
+                    onClick={() => setZoom(z => Math.max(0.5, z - 0.1))}>
+                    <ZoomOut className="w-3 h-3" />
+                  </Button>
+                  <Slider min={0.5} max={3} step={0.01} value={[zoom]}
+                    onValueChange={([v]) => setZoom(v)} className="flex-1" />
+                  <Button size="icon" variant="outline" className="h-7 w-7 rounded-lg flex-shrink-0"
+                    onClick={() => setZoom(z => Math.min(3, z + 0.1))}>
+                    <ZoomIn className="w-3 h-3" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="icon" variant="outline" className="h-7 w-7 rounded-lg flex-shrink-0"
-                  onClick={() => setZoom(z => Math.max(0.5, z - 0.1))}>
-                  <ZoomOut className="w-3 h-3" />
+
+              {/* Transform */}
+              <div className="grid grid-cols-3 gap-2">
+                <Button size="sm" variant="outline" className="rounded-xl gap-1 text-xs h-8" onClick={handleRotateCCW}>
+                  <RotateCcw className="w-3.5 h-3.5" /> CCW
                 </Button>
-                <Slider min={0.5} max={3} step={0.01} value={[zoom]}
-                  onValueChange={([v]) => setZoom(v)} className="flex-1" />
-                <Button size="icon" variant="outline" className="h-7 w-7 rounded-lg flex-shrink-0"
-                  onClick={() => setZoom(z => Math.min(3, z + 0.1))}>
-                  <ZoomIn className="w-3 h-3" />
+                <Button size="sm" variant="outline" className="rounded-xl gap-1 text-xs h-8" onClick={handleRotateCW}>
+                  <RotateCw className="w-3.5 h-3.5" /> CW
+                </Button>
+                <Button size="sm" variant={flipH ? 'default' : 'outline'} className="rounded-xl gap-1 text-xs h-8"
+                  onClick={() => setFlipH(v => !v)}>
+                  <FlipHorizontal className="w-3.5 h-3.5" /> Flip H
+                </Button>
+                <Button size="sm" variant={flipV ? 'default' : 'outline'} className="rounded-xl gap-1 text-xs h-8"
+                  onClick={() => setFlipV(v => !v)}>
+                  <FlipVertical className="w-3.5 h-3.5" /> Flip V
+                </Button>
+                <Button size="sm" variant="outline" className="rounded-xl gap-1 text-xs h-8" onClick={handleCenter}>
+                  <Maximize2 className="w-3.5 h-3.5" /> Center
+                </Button>
+                <Button size="sm" variant="outline"
+                  className="rounded-xl gap-1 text-xs h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={handleReset}>
+                  <RefreshCw className="w-3.5 h-3.5" /> Reset
                 </Button>
               </div>
+
+              <p className="text-center text-xs text-muted-foreground">
+                Rotasi: {rotation}°{flipH ? ' · Flip H' : ''}{flipV ? ' · Flip V' : ''}
+              </p>
             </div>
 
-            {/* Transform */}
-            <div className="grid grid-cols-3 gap-2">
-              <Button size="sm" variant="outline" className="rounded-xl gap-1 text-xs h-8" onClick={handleRotateCCW}>
-                <RotateCcw className="w-3.5 h-3.5" /> CCW
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-xl gap-1 text-xs h-8" onClick={handleRotateCW}>
-                <RotateCw className="w-3.5 h-3.5" /> CW
-              </Button>
-              <Button size="sm" variant={flipH ? 'default' : 'outline'} className="rounded-xl gap-1 text-xs h-8"
-                onClick={() => setFlipH(v => !v)}>
-                <FlipHorizontal className="w-3.5 h-3.5" /> Flip H
-              </Button>
-              <Button size="sm" variant={flipV ? 'default' : 'outline'} className="rounded-xl gap-1 text-xs h-8"
-                onClick={() => setFlipV(v => !v)}>
-                <FlipVertical className="w-3.5 h-3.5" /> Flip V
-              </Button>
-              <Button size="sm" variant="outline" className="rounded-xl gap-1 text-xs h-8" onClick={handleCenter}>
-                <Maximize2 className="w-3.5 h-3.5" /> Center
-              </Button>
-              <Button size="sm" variant="outline"
-                className="rounded-xl gap-1 text-xs h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleReset}>
-                <RefreshCw className="w-3.5 h-3.5" /> Reset
-              </Button>
-            </div>
+            {/* Live Preview */}
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Live Preview
+                </span>
+                <div className="flex gap-1">
+                  {([['desktop', Monitor], ['tablet', Tablet], ['mobile', Smartphone]] as [DeviceTab, typeof Monitor][]).map(([d, Icon]) => (
+                    <button key={d} onClick={() => setDevice(d)}
+                      className={cn('p-1 rounded-lg transition-colors',
+                        device === d ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            <p className="text-center text-xs text-muted-foreground">
-              Rotasi: {rotation}°{flipH ? ' · Flip H' : ''}{flipV ? ' · Flip V' : ''}
-            </p>
-          </div>
+              <div className="flex justify-center">
+                <div className="relative overflow-hidden rounded-xl border border-border bg-muted"
+                  style={{ width: previewW, height: Math.max(previewH, 60) }}>
+                  {previewUrl ? (
+                    <img src={previewUrl} alt="preview" className="w-full h-full object-cover"
+                      style={{ opacity: previewStale ? 0.5 : 1, transition: 'opacity 0.2s' }} />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2">
+                      <div className="w-5 h-5 rounded bg-muted-foreground/20" />
+                      <p className="text-[10px] text-muted-foreground text-center">Geser gambar</p>
+                    </div>
+                  )}
+                  {previewStale && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/30">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    </div>
+                  )}
+                </div>
+              </div>
 
-          {/* Live Preview */}
-          <div className="p-4 flex-1">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Live Preview
-              </span>
-              <div className="flex gap-1">
-                {([['desktop', Monitor], ['tablet', Tablet], ['mobile', Smartphone]] as [DeviceTab, typeof Monitor][]).map(([d, Icon]) => (
-                  <button key={d} onClick={() => setDevice(d)}
-                    className={cn('p-1 rounded-lg transition-colors',
-                      device === d ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
-                    <Icon className="w-3.5 h-3.5" />
-                  </button>
-                ))}
+              <div className="mt-3 text-center space-y-0.5">
+                <p className="text-xs text-muted-foreground">{cfg.hint}</p>
+                <p className="text-xs text-muted-foreground">Max: {formatBytes(cfg.maxBytes)} · WebP</p>
               </div>
             </div>
 
-            <div className="flex justify-center">
-              <div className="relative overflow-hidden rounded-xl border border-border bg-muted"
-                style={{ width: previewW, height: Math.max(previewH, 60) }}>
-                {previewUrl ? (
-                  <img src={previewUrl} alt="preview" className="w-full h-full object-cover"
-                    style={{ opacity: previewStale ? 0.5 : 1, transition: 'opacity 0.2s' }} />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2">
-                    <div className="w-5 h-5 rounded bg-muted-foreground/20" />
-                    <p className="text-[10px] text-muted-foreground text-center">Geser gambar</p>
-                  </div>
-                )}
-                {previewStale && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/30">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-3 text-center space-y-0.5">
-              <p className="text-xs text-muted-foreground">{cfg.hint}</p>
-              <p className="text-xs text-muted-foreground">Max: {formatBytes(cfg.maxBytes)} · WebP</p>
-            </div>
-          </div>
+          </div>{/* end scrollable area */}
 
           {error && (
-            <div className="px-4 pb-2">
+            <div className="px-4 py-2 border-t border-border flex-shrink-0">
               <p className="text-xs text-destructive">{error}</p>
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="p-4 border-t border-border flex flex-col gap-2">
+          {/* Action Buttons — outside scroll area, always visible, safe-area aware */}
+          <div className="p-4 border-t border-border flex flex-col gap-2 flex-shrink-0 bg-card">
             <Button onClick={handleSave} disabled={processing || !croppedArea}
               className="w-full rounded-xl gap-2 bg-primary text-primary-foreground btn-glow">
               {processing

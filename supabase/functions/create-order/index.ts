@@ -57,7 +57,7 @@ async function createTripayTransaction(
   const baseUrl = isSandbox ? "https://tripay.co.id/api-sandbox" : "https://tripay.co.id/api";
   const expiry = Math.floor(Date.now() / 1000) + 3600;
   const signature = await hmacSha256(config.private_key, `${config.merchant_code}${order.invoice_id}${order.amount}`);
-  const siteUrl = Deno.env.get("SITE_URL") || "https://shielacomcell.com";
+  const siteUrl = Deno.env.get("SITE_URL") || "https://shielacomcell.my.id";
   const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/payment-webhook?gateway=tripay`;
 
   const res = await fetch(`${baseUrl}/transaction/create`, {
@@ -82,17 +82,18 @@ async function createTripayTransaction(
   return { payment_code: data.data?.pay_code || data.data?.qr_string || "", payment_url: data.data?.checkout_url || "" };
 }
 
+// Duitku V2 Inquiry (Create Transaction) — sesuai dokumentasi resmi:
+// signature = HMAC-SHA256(merchantCode + merchantOrderId + paymentAmount, apiKey)
 async function createDuitkuTransaction(
   config: Record<string, string>,
-  order: { invoice_id: string; amount: number; product_name: string; buyer_name: string; buyer_email: string; payment_method: string },
+  order: { invoice_id: string; amount: number; product_name: string; buyer_name: string; buyer_email: string; buyer_phone: string; payment_method: string },
 ) {
   const isSandbox = config.sandbox === "true";
   const baseUrl = isSandbox ? "https://sandbox.duitku.com/webapi" : "https://passport.duitku.com/webapi";
-  const sigRaw = `${config.merchant_code}${order.invoice_id}${order.amount}${config.api_key}`;
-  const sigBytes = new TextEncoder().encode(sigRaw);
-  const hashBuf = await crypto.subtle.digest("MD5", sigBytes).catch(() => crypto.subtle.digest("SHA-256", sigBytes));
-  const signature = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  const siteUrl = Deno.env.get("SITE_URL") || "https://shielacomcell.com";
+
+  const signature = await hmacSha256(config.api_key, `${config.merchant_code}${order.invoice_id}${order.amount}`);
+
+  const siteUrl = Deno.env.get("SITE_URL") || "https://shielacomcell.my.id";
   const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/payment-webhook?gateway=duitku`;
 
   const res = await fetch(`${baseUrl}/api/merchant/v2/inquiry`, {
@@ -101,11 +102,14 @@ async function createDuitkuTransaction(
     body: JSON.stringify({
       merchantCode: config.merchant_code,
       paymentAmount: order.amount,
+      paymentMethod: order.payment_method,
       merchantOrderId: order.invoice_id,
       productDetails: order.product_name,
-      email: order.buyer_email || "customer@email.com",
-      paymentMethod: order.payment_method,
+      additionalParam: "",
+      merchantUserInfo: "",
       customerVaName: order.buyer_name,
+      email: order.buyer_email || "customer@email.com",
+      phoneNumber: order.buyer_phone || "",
       callbackUrl,
       returnUrl: `${siteUrl}/order-status/${order.invoice_id}`,
       signature,
@@ -113,8 +117,8 @@ async function createDuitkuTransaction(
     }),
   });
   const data = await res.json();
-  if (!data.paymentUrl) throw new Error(data.Message || "Duitku error");
-  return { payment_code: data.vaNumber || "", payment_url: data.paymentUrl || "" };
+  if (!data.paymentUrl) throw new Error(data.Message || data.statusMessage || "Duitku error");
+  return { payment_code: data.vaNumber || data.qrString || "", payment_url: data.paymentUrl || "" };
 }
 
 function demoPay(method: string, invoiceId: string): { payment_code: string; payment_url: string } {

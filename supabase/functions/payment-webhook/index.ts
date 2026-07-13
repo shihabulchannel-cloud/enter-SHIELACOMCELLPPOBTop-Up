@@ -185,6 +185,28 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// ─── Body parser: dukung JSON (Tripay/iPaymu) dan form-urlencoded (Duitku $_POST) ──
+function parseWebhookBody(bodyText: string, contentType: string): Record<string, unknown> {
+  const tryJson = () => { try { return JSON.parse(bodyText); } catch { return null; } };
+  const tryForm = () => {
+    try {
+      const params = new URLSearchParams(bodyText);
+      const obj: Record<string, unknown> = {};
+      for (const [k, v] of params.entries()) obj[k] = v;
+      return Object.keys(obj).length > 0 ? obj : null;
+    } catch { return null; }
+  };
+
+  if (contentType.includes("application/json")) {
+    return tryJson() || tryForm() || {};
+  }
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    return tryForm() || tryJson() || {};
+  }
+  // Content-type tidak diketahui — coba keduanya
+  return tryJson() || tryForm() || {};
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -192,12 +214,14 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const url = new URL(req.url);
     const gateway = url.searchParams.get("gateway") || "tripay";
+    const contentType = req.headers.get("content-type") || "";
     const body = await req.text();
 
-    console.log(`[payment-webhook] gateway=${gateway}, body length=${body.length}`);
+    console.log(`[payment-webhook] gateway=${gateway}, content-type=${contentType}, body length=${body.length}`);
 
-    let payload: Record<string, unknown> = {};
-    try { payload = JSON.parse(body); } catch {
+    const payload = parseWebhookBody(body, contentType);
+    if (Object.keys(payload).length === 0) {
+      console.warn(`[payment-webhook] Body kosong / tidak dapat diparsing untuk gateway=${gateway}`);
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
@@ -217,14 +241,30 @@ Deno.serve(async (req: Request) => {
         const expectedSig = await hmacSha256(privateKey, body);
         if (callbackSig && callbackSig !== expectedSig) {
           console.warn("[payment-webhook] Tripay signature mismatch");
-          return new Response("Signature invalid", { status: 400 });
+          return new Response("Signature invalid", { status: 400, headers: corsHeaders });
         }
       }
       invoiceId = String(payload.merchant_ref || "");
       isPaid = payload.status === "PAID";
     } else if (gateway === "duitku") {
-      invoiceId = String(payload.merchantOrderId || "");
-      isPaid = payload.resultCode === "00";
+      // Verifikasi signature sesuai dokumentasi resmi Duitku:
+      // hash_hmac('sha256', merchantCode + amount + merchantOrderId, apiKey)
+      const { data: gwConfig } = await supabase.from("sc_payment_configs").select("*").eq("gateway", "duitku").maybeSingle();
+      const apiKey = (gwConfig?.config_json as Record<string, string>)?.api_key || "";
+      const merchantCode = String(payload.merchantCode || "");
+      const amount = String(payload.amount || "");
+      const merchantOrderId = String(payload.merchantOrderId || "");
+      const callbackSig = String(payload.signature || "");
+
+      if (apiKey && merchantCode && amount && merchantOrderId) {
+        const expectedSig = await hmacSha256(apiKey, `${merchantCode}${amount}${merchantOrderId}`);
+        if (callbackSig && callbackSig !== expectedSig) {
+          console.warn("[payment-webhook] Duitku signature mismatch");
+          return new Response("Signature invalid", { status: 400, headers: corsHeaders });
+        }
+      }
+      invoiceId = merchantOrderId;
+      isPaid = String(payload.resultCode) === "00";
     } else if (gateway === "ipaymu") {
       invoiceId = String(payload.reference_id || "");
       isPaid = payload.status === "berhasil" || payload.status_code === "1";
