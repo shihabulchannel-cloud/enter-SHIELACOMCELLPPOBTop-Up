@@ -1,113 +1,123 @@
-# Plan: Smart Image Upload & Crop System
+# Perbaikan Frontend/UI — Hero Slider, Banner DB, Invoice, Validasi Form, Cara Transaksi
 
-## Ringkasan
-Sistem upload gambar yang menampilkan preview + crop editor sebelum upload ke server.
-Upload hanya terjadi setelah admin klik "Simpan" di modal crop.
+## Context
 
-## Library yang Ditambah
-- `react-easy-crop@latest` — MIT license, stabil, support pinch zoom mobile
+Backend inti (Digiflazz, Duitku, webhook, auth, admin-api, RLS, signature) sudah diperbaiki dan **tidak akan disentuh** di task ini. Task ini murni frontend/UI, KECUALI satu pengecualian yang sudah disetujui user secara eksplisit: menambah 1 tabel Supabase baru (`sc_banners`) + 1 blok action baru (murni ditambahkan, tidak mengubah action lama) di `admin-api` khusus untuk simpan Banner — supaya banner benar-benar tersimpan di database dan tampil ke semua pengunjung, bukan hanya di browser admin sendiri (root cause: `bannerStore` saat ini pakai `localStorage`).
 
-## File Baru
+Semua perbaikan lain (Hero Slider responsive, help text ukuran gambar, Invoice, validasi form dinamis per kategori, halaman Cara Transaksi) adalah **pure frontend**, tidak menyentuh Edge Function/Digiflazz/Duitku sama sekali.
 
-### 1. `src/lib/image-processing.ts`
-Canvas-based image processor:
-- `getCroppedImageBlob(src, crop, rotation, flipH, flipV, targetW, targetH, maxBytes)` → `Blob`
-- Auto-compress: 90% → 85% → 80% → 75% hingga di bawah maxBytes
-- Output: WebP (fallback image/jpeg)
-- `getImageMeta(file)` → { width, height, size, format, name }
-- `blobToDataUrl(blob)` → base64 string (untuk BannerManager / LogoManager)
+---
 
-### 2. `src/components/admin/ImageCropModal.tsx`
-Modal full-screen 2-panel layout:
+## 1. Banner tersimpan di Database (bukan localStorage)
 
-**Panel Kiri — Crop Editor:**
-- react-easy-crop dengan aspect ratio terkunci sesuai preset
-- Zoom slider (0.5× – 3×)
-- Pinch zoom mobile
-- Rotate 90° CW / CCW
-- Flip Horizontal / Flip Vertical
-- Reset (kembali ke posisi awal)
-- Center Image button
+**Root cause terkonfirmasi:** `bannerStore` (`src/lib/store.ts`) pakai `localStorage` key `sc_banners_v2`. Admin upload banner di browsernya sendiri → tidak muncul di browser pengunjung lain.
 
-**Panel Kanan — Live Preview:**
-- Canvas preview update real-time saat crop berubah
-- Tabs device: Desktop | Tablet | Mobile
-  - Desktop: preview di container 300px wide, aspect ratio preset
-  - Tablet: container 180px
-  - Mobile: container 120px
-- Info: "Hasil akhir: 1440 × 480 px | Max 500 KB"
-- Tampilkan estimasi ukuran output
+**Perubahan (Enter Cloud):**
+- Migration baru: tabel `sc_banners` (id, title, subtitle, badge, button1_text, button1_link, button2_text, button2_link, banner_link, image_url, theme, active, display_order, created_at, updated_at).
+  - RLS: `public SELECT` (true, semua baris — sama seperti `sc_products`), INSERT/UPDATE/DELETE **hanya via service_role** (ditulis lewat admin-api, sama pola dengan `sc_products`).
+- `supabase/functions/admin-api/index.ts`: **tambah blok action baru** `banner_insert`, `banner_update`, `banner_delete`, `banner_reorder` (copy pola `product_insert/update/delete` yang sudah ada). Tidak ada baris kode lama yang diubah/dihapus.
 
-**Header Info Bar:**
-- Nama file | Resolusi asli | Ukuran file | Format
+**Perubahan Frontend:**
+- `src/components/admin/BannerManager.tsx`: ganti sumber data dari `bannerStore` (localStorage) ke query Supabase langsung (public read) + panggil `admin-api` (action `banner_*`, header `X-Admin-Token` — pola sama seperti `ProductManager.tsx`) untuk create/update/delete/reorder. Upload gambar pindah dari `onBase64` → `onUrl` + `folder: 'banners'` (upload ke Supabase Storage via `uploadToStorage` yang sudah ada di `cms-api.ts`, sama seperti `CmsCategoryManager.tsx`) — hasilnya `image_url`, bukan base64 lagi.
+- `src/components/home/HeroSlider.tsx`: baca banner dari Supabase (`sc_banners`, filter `active=true`, order by `display_order`) alih-alih `bannerStore.get()`. Tambah **realtime subscription** (`supabase.channel(...).on('postgres_changes', ...)`, pola sama seperti `OrderStatus.tsx`) agar perubahan admin langsung tampil tanpa refresh.
+- Data lama di `bannerStore` (localStorage) otomatis diabaikan setelah migrasi; tidak perlu migrasi data karena defaultnya kosong/hardcode text saja.
 
-**Footer Buttons:**
-- [Batal] [Ganti Gambar] [Reset] [Simpan & Upload]
+---
 
-**Preset Config dalam modal:**
-```
-banner:      ratio 3:1    → 1440×480   max 500KB
-thumbnail:   ratio 1:1    → 600×600    max 300KB
-subcategory: ratio 3:4    → 600×800    max 300KB
-logo:        ratio 1:1    → 200×200    max 200KB
-favicon:     ratio 1:1    → 64×64      max 100KB
-product:     ratio 1:1    → 600×600    max 500KB
-hero_slide:  ratio 16:9   → 1280×720   max 500KB
-```
+## 2. Hero Slider — Perbaikan Responsive Mobile (`src/components/home/HeroSlider.tsx`)
 
-**Safe Area Guide:**
-- Tampilkan garis putih tipis (dashed) di 80% dalam crop area
-- Label "Safe Zone" — area yang dijamin terlihat di semua device
+**Root cause:** Section pakai `position: absolute inset-0` untuk tiap slide (teknik crossfade) di dalam container dengan **height tetap** (`clamp(480px, 36vw, 560px)`). Di mobile, konten di-stack vertikal (`flex-col`: gambar dulu `order-1`, lalu teks+tombol `order-2`) — total tinggi konten stack ini sering **melebihi** tinggi container yang di-clamp, sehingga:
+- Konten terpotong oleh `overflow-hidden` pada section, ATAU
+- Tombol CTA (elemen paling akhir/bawah) berbenturan dengan dots indicator yang di-pin `absolute bottom-4` relatif ke SELURUH section (bukan ke gambar saja).
 
-## File Yang Diupdate
+**Perbaikan struktural (bukan sekadar scale):**
+- Height section: mobile → **auto** (mengikuti tinggi konten asli), desktop (`md:` ke atas) → tetap pakai `clamp(...)` seperti sekarang (perilaku desktop TIDAK berubah).
+- Slide switching: mobile → render hanya slide aktif secara normal flow (`block` / `hidden`, bukan `absolute` + `opacity`), sehingga tinggi container mengikuti konten. Desktop (`md:` ke atas) → tetap pakai `md:absolute md:inset-0` + crossfade opacity seperti sekarang.
+- Arrow (prev/next) & dots: mobile → dipindah agar overlay **hanya di area gambar** (wrap gambar dalam container `relative` sendiri, taruh arrow/dots di dalamnya), bukan relatif ke seluruh section — supaya tidak pernah menimpa tombol CTA yang berada di block teks (di bawah gambar, mobile). Desktop → tetap posisi & perilaku sekarang (relatif ke seluruh section, karena di desktop gambar & teks sejajar, area di bawah dots memang kosong).
+- Test breakpoint: 320/360/375/390/412/480/768/1024px — pastikan badge, title, subtitle, tombol tidak terpotong, gambar tidak pecah/crop, spacing konsisten.
 
-### 3. `src/components/admin/CmsCategoryManager.tsx`
-Ganti komponen `ImageUpload` (internal) dengan `SmartImageUpload`:
-- Mapping: `folder='thumbnails'` → preset `thumbnail`, `folder='banners'` → preset `banner`, `folder='icons'` → preset `logo`
-- Klik Upload → file picker → modal crop terbuka
-- Setelah Simpan → upload Blob ke Supabase → callback `onUploaded(url)`
-- API eksternal `onUploaded(url: string)` tidak berubah sama sekali
+---
 
-### 4. `src/components/admin/BannerManager.tsx`
-- `handleImgUpload` dimodifikasi: file picker → modal crop (preset `hero_slide`) → output base64 → set state
-- Semua logic lain tidak berubah
+## 3. Help Text Rekomendasi Ukuran Gambar
 
-### 5. `src/components/admin/WebsiteManagement.tsx`
-- `LogoManager.handleUpload` dimodifikasi: file picker → modal crop (preset `logo`) → output base64 → save ke store
-- Semua logic lain tidak berubah
+Update `src/lib/image-presets.ts` (value only, tidak breaking untuk gambar yang sudah pernah diupload):
 
-## Alur Upload Baru
-```
-Klik Upload
-  ↓
-File picker (pilih gambar)
-  ↓
-Modal ImageCropModal terbuka
-  ├── Header: info file (nama, resolusi asli, ukuran, format)
-  ├── Kiri: react-easy-crop editor (drag, zoom, rotate, flip)
-  └── Kanan: live canvas preview (update realtime)
-  ↓
-Admin adjust crop → klik "Simpan & Upload"
-  ↓
-image-processing.ts:
-  - Crop ke area yang dipilih
-  - Resize ke target dimensions
-  - Compress (90% → 75%) sampai ≤ maxBytes
-  - Convert ke WebP
-  ↓
-Upload blob ke Supabase Storage (atau convert base64)
-  ↓
-Modal tutup, preview terupdate
-```
+| Preset | Lama | Baru | Dipakai di |
+|---|---|---|---|
+| `logo` | 200×200, 200KB | **512×512, 2MB** | `WebsiteManagement.tsx` (LogoManager) |
+| `hero_slide` | 1280×720, 500KB | **1920×700, 3MB** (rasio ~16:6) | `BannerManager.tsx` |
+| `thumbnail` | 600×600, 300KB | *(tidak berubah — sudah sesuai)* | `CmsCategoryManager.tsx` (Thumbnail Card kategori) |
+| `banner` | 1440×480, 500KB | **1200×400** (rasio tetap 3:1) | `CmsCategoryManager.tsx` (Banner Hero, "Banner Promo") |
 
-## Backward Compatibility
-- Semua gambar lama yang sudah ada tetap berfungsi (URL tidak berubah)
-- Tidak ada perubahan database schema
-- Tidak ada perubahan API (callback `onUploaded(url)` tetap sama)
-- Karena gambar yang diupload SUDAH di-crop ke rasio yang benar, frontend bisa tetap pakai `object-cover` secara aman
+Tambahkan **Help Text di bawah tombol upload** (bukan popup) pada 4 lokasi: `LogoManager` (WebsiteManagement.tsx), `BannerManager.tsx`, dan 2 `ImageUpload` di `CmsCategoryManager.tsx` (Thumbnail Card & Banner Hero) — format teks: "Rekomendasi: WxH px · Rasio · Format · Maksimal Y MB", pakai style hint yang sudah ada (`text-xs text-muted-foreground`).
 
-## Yang TIDAK Berubah
-- Struktur database
-- API fungsi-fungsi yang sudah ada
-- Tampilan frontend (Products, ProductCatalog, CategoryBanner, SubCategoryGrid, dll)
-- Alur upload yang sudah berhasil (hanya ditambah langkah crop di tengah)
+---
+
+## 4. Invoice / Halaman Status Pesanan (`src/pages/OrderStatus.tsx`)
+
+Tanpa mengubah `order-api.ts`, `check-order`, atau field database — murni presentasi ulang data yang sudah tersedia di `sc_orders` (`payment_status`, `order_status`, `product_price`, `payment_fee`, `payment_amount`, dst, sudah ada di schema).
+
+- **Progress Timeline** (baru): 5 langkah — Pesanan Dibuat → Menunggu Pembayaran → Pembayaran Diterima → Pesanan Diproses → Pesanan Selesai. Progress ditentukan dari kombinasi `payment_status` + `order_status` yang sudah ada (mapping murni di frontend, tidak perlu field baru).
+- **Status badge** lebih jelas: Menunggu Pembayaran / Lunas / Diproses / Selesai / Expired — mapping dari `payment_status`/`order_status` yang ada.
+- **Ringkasan Pembelian** lengkap: Nama Produk, **Kategori** (lookup client-side: `product_sku` → query `sc_products.category_id` → label dari `CATEGORIES` di `product-slugs.ts`, read-only, tanpa ubah schema), Nomor Tujuan, Nominal (`product_price`), Biaya Admin (`payment_fee`), Total Bayar (`payment_amount`) — breakdown, bukan cuma total seperti sekarang.
+- **Countdown**: reuse pola `useCountdown` yang sudah ada di `Payment.tsx` (dipindah ke helper bersama atau di-duplicate kecil — tidak mengubah `Payment.tsx`), tampilkan hanya saat status masih menunggu pembayaran.
+- **Visual**: card modern + shadow (reuse token desain yang sudah ada: `rounded-2xl`, `shadow-card`/`border-border`), icon per status (reuse `StatusIcon` yang sudah ada, perluas warna/icon untuk status baru), fully responsive (mobile-first, sudah pola container yang dipakai halaman lain).
+- Backend/logic **tidak disentuh** — `checkOrder()`, realtime subscription `sc_orders` yang sudah ada tetap dipakai apa adanya.
+
+---
+
+## 5. Validasi Form Dinamis per Kategori (`src/pages/Order.tsx`)
+
+**Root cause terkonfirmasi (query database real):** `category_id` yang benar-benar dipakai di `sc_products` adalah: `pulsa`(158), `game`(79), `ewallet`(49), `data`(37), `voucher`(27), `pln`(5), `aktivasi`(4), `ppob`(3). `TARGET_CONFIG` di `Order.tsx` **tidak punya entry untuk `voucher` dan `aktivasi`** → otomatis fallback ke hint `pulsa` ("Masukkan nomor HP tujuan pengisian pulsa") — ini yang menyebabkan bug "beli Token PLN tapi teks bantuan bilang pulsa" jika kategori produk tersebut ter-mapping ke selain `pln` (mis. produk yang belum match keyword `mapCategory()` di `sync-products`, bukan hal yang bisa diperbaiki dari frontend — **tidak disentuh** karena itu bagian Digiflazz sync yang protected). Yang **bisa** & akan diperbaiki dari frontend:
+
+- Tambah entry `voucher`: label "Email / User ID Tujuan", hint "Masukkan email, User ID, atau nomor HP sesuai jenis voucher yang dibeli (Google Play, Garena, PB Cash, Playstation, dll)".
+- Tambah entry `aktivasi`: label "Nomor HP", hint "Masukkan nomor HP yang akan diaktivasi kartu perdana / paketnya".
+- `ppob` (BPJS, TV kabel, dst — semuanya satu `category_id` di database, tidak ada kategori terpisah per biller): tambah **sub-deteksi berbasis `product.brand`/`product.name`** (murni frontend, tidak ubah kategori/database) untuk hint lebih spesifik:
+  - Brand mengandung "BPJS" → "Masukkan Nomor Virtual Account BPJS"
+  - Brand/nama mengandung "PDAM" → "Masukkan ID Pelanggan PDAM"
+  - Brand/nama mengandung "TELKOM"/"INDIHOME" → "Masukkan Nomor Telepon Rumah / ID Pelanggan Indihome"
+  - Brand/nama mengandung "TV"/"VISION"/"GOL" (TV kabel) → "Masukkan ID Pelanggan / Smart Card"
+  - Default `ppob` (tidak match keyword manapun) → hint generik "Masukkan ID Pelanggan / Nomor Akun sesuai layanan"
+- `pln` (aktual = Token PLN prepaid di database ini): hint dipertegas "Masukkan nomor meter listrik / ID pelanggan PLN (10–12 digit)" — label & hint sudah cukup benar, hanya dirapikan.
+- Kategori lain yang sudah benar (`pulsa`, `data`, `ewallet`, `game`) — **tidak diubah**.
+
+---
+
+## 6. Halaman Cara Transaksi — Hapus Hero Duplikat (`src/pages/CaraTransaksi.tsx`)
+
+`CaraTransaksi.tsx` punya Hero section sendiri (badge "Panduan" + judul "Cara Transaksi" + subtitle statis), lalu me-render `<HowToTransact />` yang **juga** punya Hero section sendiri di dalamnya (badge "Panduan Transaksi" + judul "Cara Transaksi" + subtitle + timeline animasi). Ini yang dimaksud "dua Hero Section".
+
+**Perbaikan:** Hapus blok `<section className="bg-hero-gradient pt-24...">...</section>` (Hero pertama) di `CaraTransaksi.tsx`. Biarkan `<HowToTransact />` (yang sudah punya Hero + timeline animasi) sebagai satu-satunya Hero. **Tidak mengubah** `HowToTransact.tsx` sama sekali (animasi timeline & urutan langkah tetap).
+
+---
+
+## 7. Audit Mobile Umum
+
+Sudah di-scan (`StatsCounter`, `HeroSlider`, layout umum) — tidak ditemukan overflow/fixed-width bermasalah lain selain Hero Slider. Setelah perbaikan di atas, lakukan verifikasi visual cepat di breakpoint utama (375px, 768px) untuk halaman: Beranda, Order, Payment, OrderStatus, Cara Transaksi.
+
+---
+
+## Implementation checklist
+
+- [ ] Migration baru: tabel `sc_banners` + RLS (public select true; insert/update/delete hanya service_role)
+- [ ] `admin-api/index.ts`: tambah action `banner_insert`, `banner_update`, `banner_delete`, `banner_reorder` (murni tambahan, tidak ubah action lama)
+- [ ] `BannerManager.tsx`: pindah dari `bannerStore` (localStorage) ke Supabase (`sc_banners` + admin-api), upload gambar via `folder: 'banners'` → `image_url`
+- [ ] `HeroSlider.tsx`: baca dari `sc_banners` (bukan `bannerStore`) + realtime subscription
+- [ ] `HeroSlider.tsx`: restrukturisasi height (mobile auto / desktop clamp) dan posisi arrow+dots (mobile relatif ke gambar, desktop relatif ke section) — verifikasi di 320/360/375/390/412/480/768/1024px, tombol CTA tidak pernah tertutup dots
+- [ ] `image-presets.ts`: update `logo` → 512×512/2MB, `hero_slide` → 1920×700/3MB, `banner` → 1200×400 (rasio 3:1 tetap)
+- [ ] Tambah help text ukuran gambar (bukan popup) di: `LogoManager`, `BannerManager`, `CmsCategoryManager` (Thumbnail Card & Banner Hero)
+- [ ] `OrderStatus.tsx`: tambah progress timeline 5 langkah, status badge lengkap, ringkasan pembelian dengan breakdown (Kategori, Nominal, Biaya Admin, Total), countdown, card modern — tanpa ubah `order-api.ts`/`check-order`
+- [ ] `Order.tsx` `TARGET_CONFIG`: tambah `voucher`, `aktivasi`; tambah sub-deteksi brand/nama untuk `ppob` (BPJS/PDAM/Telkom/TV); perbaiki teks `pln`
+- [ ] `CaraTransaksi.tsx`: hapus Hero section pertama (duplikat), pertahankan `HowToTransact` apa adanya
+
+## Verification checklist
+
+- [ ] Upload banner baru di Admin Panel → langsung tampil di Beranda (buka di browser/incognito lain, tanpa refresh manual berkat realtime) — buktikan data dari DB bukan localStorage
+- [ ] Hero Slider di 320px/375px/390px/768px/1024px: badge+judul+subtitle+tombol tidak terpotong, tombol tidak tertutup dots, gambar tidak pecah
+- [ ] Upload Logo, Banner Slider, Thumbnail Kategori, Banner Hero di Admin Panel masing-masing menampilkan help text ukuran yang benar di bawah tombol upload
+- [ ] Order.tsx: beli produk kategori `voucher` dan `aktivasi` → helper text sesuai (bukan fallback "pulsa")
+- [ ] Order.tsx: beli produk `ppob` dengan brand mengandung "BPJS" → hint BPJS; tanpa keyword cocok → hint generik ppob
+- [ ] OrderStatus.tsx: order dengan status pending/paid/success/failed masing-masing menampilkan progress timeline & badge yang sesuai; breakdown Nominal+Biaya Admin+Total sesuai data asli order
+- [ ] CaraTransaksi.tsx: hanya 1 Hero section tampil, timeline animasi & urutan langkah tidak berubah
+- [ ] Regression: Login Admin, Login Customer, Provider Digiflazz, Sinkronisasi Produk, Payment Gateway (Duitku), Checkout, CMS Kategori tetap berfungsi normal tanpa error "Edge Function returned a non-2xx status code"
+- [ ] Lint & build project berhasil tanpa error
