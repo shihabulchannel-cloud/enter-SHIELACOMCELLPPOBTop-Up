@@ -1,35 +1,40 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Upload, Eye, EyeOff, GripVertical, Edit2, Check, X, Image as ImageIcon } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Trash2, Upload, Eye, EyeOff, GripVertical, Edit2, Check, X, Image as ImageIcon, RefreshCw, Loader2, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { bannerStore, type Banner, logAction } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { useImageCrop } from '@/hooks/useImageCrop';
+import { IMAGE_PRESETS } from '@/lib/image-presets';
+import {
+  fetchAllBanners, adminBannerApi, type DbBanner,
+} from '@/lib/banner-api';
 
-type BannerTheme = Banner['theme'];
+type BannerInput = Omit<DbBanner, 'id' | 'created_at' | 'updated_at'>;
 
-const EMPTY_FORM = (): Omit<Banner, 'id'> => ({
+const EMPTY_FORM = (): BannerInput => ({
   title: '', subtitle: '', badge: '',
-  button1Text: 'Beli Sekarang', button1Link: '/products',
-  button2Text: 'Hubungi WhatsApp', button2Link: '',
-  bannerLink: '',
-  imageDataUrl: '', theme: 'game', active: true, order: 0,
+  button1_text: 'Beli Sekarang', button1_link: '/products',
+  button2_text: 'Hubungi WhatsApp', button2_link: '',
+  banner_link: '',
+  image_url: '', theme: 'game', active: true, display_order: 0,
 });
 
 function BannerForm({
-  initial, onSave, onCancel,
+  initial, onSave, onCancel, saving,
 }: {
-  initial?: Partial<Banner>;
-  onSave: (data: Omit<Banner, 'id'>) => void;
+  initial?: Partial<BannerInput>;
+  onSave: (data: BannerInput) => void;
   onCancel: () => void;
+  saving: boolean;
 }) {
-  const [form, setForm] = useState<Omit<Banner, 'id'>>({ ...EMPTY_FORM(), ...initial });
-  const f = (k: keyof typeof form) => (v: string | boolean) => setForm(p => ({ ...p, [k]: v }));
+  const [form, setForm] = useState<BannerInput>({ ...EMPTY_FORM(), ...initial });
+  const f = (k: keyof BannerInput) => (v: string | boolean | number) => setForm(p => ({ ...p, [k]: v }));
 
   const { triggerCrop, cropModal, uploading: imgUploading, error: imgError } = useImageCrop({
-    preset:   'hero_slide',
-    onBase64: (dataUrl) => setForm(p => ({ ...p, imageDataUrl: dataUrl })),
+    preset: 'hero_slide',
+    folder: 'banners',
+    onUrl:  (url) => setForm(p => ({ ...p, image_url: url })),
   });
 
   return (
@@ -40,8 +45,8 @@ function BannerForm({
         <label className="text-sm font-medium text-foreground block mb-2">Gambar Banner</label>
         <div className="flex flex-col sm:flex-row items-start gap-4">
           <div className="w-full sm:w-48 h-28 rounded-xl border-2 border-dashed border-border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-            {form.imageDataUrl ? (
-              <img src={form.imageDataUrl} alt="Banner" className="w-full h-full object-cover" />
+            {form.image_url ? (
+              <img src={form.image_url} alt="Banner" className="w-full h-full object-cover" />
             ) : (
               <div className="text-center p-3">
                 <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-1" />
@@ -51,9 +56,10 @@ function BannerForm({
           </div>
           <div>
             <Button onClick={triggerCrop} disabled={imgUploading} size="sm" variant="outline" className="rounded-xl gap-2 mb-2">
-              <Upload className="w-4 h-4" /> Upload Gambar
+              {imgUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {imgUploading ? 'Mengupload...' : 'Upload Gambar'}
             </Button>
-            <p className="text-xs text-muted-foreground">JPG, PNG, WEBP — crop otomatis 16:9.</p>
+            <p className="text-xs text-muted-foreground">{IMAGE_PRESETS.hero_slide.helpText}</p>
             {imgError && <p className="text-red-500 text-xs mt-1">{imgError}</p>}
           </div>
         </div>
@@ -62,8 +68,8 @@ function BannerForm({
       <div>
         <label className="text-xs font-medium text-muted-foreground mb-1 block">Banner Link (opsional)</label>
         <Input
-          value={form.bannerLink ?? ''}
-          onChange={e => f('bannerLink')(e.target.value)}
+          value={form.banner_link ?? ''}
+          onChange={e => f('banner_link')(e.target.value)}
           placeholder="https://wa.me/628xx atau /products"
           className="rounded-xl"
         />
@@ -89,19 +95,19 @@ function BannerForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">Tombol 1 (Teks)</label>
-          <Input value={form.button1Text} onChange={e => f('button1Text')(e.target.value)} placeholder="Beli Sekarang" className="rounded-xl" />
+          <Input value={form.button1_text} onChange={e => f('button1_text')(e.target.value)} placeholder="Beli Sekarang" className="rounded-xl" />
         </div>
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">Tombol 1 (Link)</label>
-          <Input value={form.button1Link} onChange={e => f('button1Link')(e.target.value)} placeholder="/products" className="rounded-xl" />
+          <Input value={form.button1_link} onChange={e => f('button1_link')(e.target.value)} placeholder="/products" className="rounded-xl" />
         </div>
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">Tombol 2 (Teks)</label>
-          <Input value={form.button2Text} onChange={e => f('button2Text')(e.target.value)} placeholder="Hubungi WhatsApp" className="rounded-xl" />
+          <Input value={form.button2_text} onChange={e => f('button2_text')(e.target.value)} placeholder="Hubungi WhatsApp" className="rounded-xl" />
         </div>
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">Tombol 2 (Link)</label>
-          <Input value={form.button2Link} onChange={e => f('button2Link')(e.target.value)} placeholder="Kosong = WA admin" className="rounded-xl" />
+          <Input value={form.button2_link} onChange={e => f('button2_link')(e.target.value)} placeholder="Kosong = WA admin" className="rounded-xl" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -123,8 +129,8 @@ function BannerForm({
         </div>
       </div>
       <div className="flex gap-2">
-        <Button onClick={() => { if (form.title) onSave(form); }} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow">
-          <Check className="w-4 h-4" /> Simpan
+        <Button onClick={() => { if (form.title) onSave(form); }} disabled={saving} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-1 btn-glow">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Simpan
         </Button>
         <Button onClick={onCancel} size="sm" variant="outline" className="rounded-xl gap-1">
           <X className="w-4 h-4" /> Batal
@@ -135,45 +141,82 @@ function BannerForm({
 }
 
 export default function BannerManager() {
-  const [banners, setBanners] = useState<Banner[]>([]);
+  const [banners, setBanners] = useState<DbBanner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const [preview, setPreview] = useState<Banner | null>(null);
+  const [preview, setPreview] = useState<DbBanner | null>(null);
   const dragItem = useRef<number | null>(null);
   const dragOver = useRef<number | null>(null);
 
-  useEffect(() => { setBanners(bannerStore.get()); }, []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setBanners(await fetchAllBanners());
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, []);
 
-  const refresh = () => setBanners(bannerStore.get());
+  useEffect(() => { load(); }, [load]);
 
-  const handleAdd = (data: Omit<Banner, 'id'>) => {
-    bannerStore.add({ ...data, order: banners.length + 1 });
-    refresh(); setAdding(false);
+  const editingBanner = banners.find(b => b.id === editing) || null;
+
+  const handleAdd = async (data: BannerInput) => {
+    setSaving(true); setSaveError('');
+    try {
+      await adminBannerApi('banner_insert', {
+        data: { ...data, display_order: banners.length + 1 },
+      });
+      setAdding(false);
+      load();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Gagal menyimpan banner');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleEdit = (id: string, data: Omit<Banner, 'id'>) => {
-    bannerStore.update(id, data); refresh(); setEditing(null);
+  const handleEdit = async (id: string, data: BannerInput) => {
+    setSaving(true); setSaveError('');
+    try {
+      await adminBannerApi('banner_update', { id, data });
+      setEditing(null);
+      load();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Gagal menyimpan banner');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Hapus banner ini?')) return;
-    bannerStore.remove(id); refresh();
+    try { await adminBannerApi('banner_delete', { id }); } catch { /* ignore */ }
+    load();
   };
 
-  const toggleActive = (banner: Banner) => {
-    bannerStore.update(banner.id, { active: !banner.active }); refresh();
-    logAction('BANNER_TOGGLE', `${banner.active ? 'Nonaktifkan' : 'Aktifkan'} banner: ${banner.title}`);
+  const toggleActive = async (banner: DbBanner) => {
+    try { await adminBannerApi('banner_update', { id: banner.id, data: { active: !banner.active } }); } catch { /* ignore */ }
+    load();
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
     if (dragItem.current === null || dragOver.current === null) return;
     const list = [...banners];
     const [moved] = list.splice(dragItem.current, 1);
     list.splice(dragOver.current, 0, moved);
-    const reordered = list.map((b, i) => ({ ...b, order: i + 1 }));
-    bannerStore.set(reordered);
+    const reordered = list.map((b, i) => ({ ...b, display_order: i + 1 }));
+    // Optimistic update
     setBanners(reordered);
     dragItem.current = null; dragOver.current = null;
+    try {
+      await adminBannerApi('banner_reorder', {
+        orders: reordered.map(b => ({ id: b.id, display_order: b.display_order })),
+      });
+    } catch {
+      load(); // revert on failure
+    }
   };
 
   return (
@@ -181,14 +224,33 @@ export default function BannerManager() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground">Banner & Slider</h2>
-          <p className="text-muted-foreground text-sm">{banners.filter(b => b.active).length} aktif dari {banners.length} banner</p>
+          <p className="text-muted-foreground text-sm flex items-center gap-1.5">
+            <Database className="w-3.5 h-3.5" />
+            {banners.filter(b => b.active).length} aktif dari {banners.length} banner
+            <span className="text-muted-foreground/70">· tersimpan di database</span>
+          </p>
         </div>
-        <Button onClick={() => { setAdding(!adding); setEditing(null); }} size="sm" className="bg-primary text-primary-foreground btn-glow rounded-xl gap-2">
-          <Plus className="w-4 h-4" /> Tambah Banner
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={load} size="sm" variant="outline" className="rounded-xl gap-2">
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </Button>
+          <Button onClick={() => { setAdding(!adding); setEditing(null); setSaveError(''); }} size="sm" className="bg-primary text-primary-foreground btn-glow rounded-xl gap-2">
+            <Plus className="w-4 h-4" /> Tambah Banner
+          </Button>
+        </div>
       </div>
 
-      {adding && <div className="mb-4"><BannerForm onSave={handleAdd} onCancel={() => setAdding(false)} /></div>}
+      {saveError && (
+        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+          {saveError}
+        </div>
+      )}
+
+      {adding && (
+        <div className="mb-4">
+          <BannerForm onSave={handleAdd} onCancel={() => { setAdding(false); setSaveError(''); }} saving={saving} />
+        </div>
+      )}
 
       {/* Preview Modal */}
       {preview && (
@@ -198,8 +260,8 @@ export default function BannerManager() {
               <h3 className="font-bold">Preview: {preview.title}</h3>
               <button onClick={() => setPreview(null)} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
             </div>
-            {preview.imageDataUrl ? (
-              <img src={preview.imageDataUrl} alt={preview.title} className="w-full h-48 object-cover rounded-xl mb-3" />
+            {preview.image_url ? (
+              <img src={preview.image_url} alt={preview.title} className="w-full h-48 object-cover rounded-xl mb-3" />
             ) : (
               <div className="w-full h-48 bg-muted rounded-xl flex items-center justify-center mb-3">
                 <p className="text-muted-foreground text-sm">Tidak ada gambar</p>
@@ -211,65 +273,86 @@ export default function BannerManager() {
         </div>
       )}
 
-      <div className="space-y-3">
-        {banners.map((banner, i) => (
-          <div key={banner.id}>
-            {editing === banner.id ? (
-              <BannerForm initial={banner} onSave={(data) => handleEdit(banner.id, data)} onCancel={() => setEditing(null)} />
-            ) : (
-              <div
-                className={cn('bg-card border rounded-2xl p-4 transition-all', banner.active ? 'border-border' : 'border-border/30 opacity-60')}
-                draggable
-                onDragStart={() => { dragItem.current = i; }}
-                onDragEnter={() => { dragOver.current = i; }}
-                onDragEnd={handleDragEnd}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="cursor-grab text-muted-foreground flex-shrink-0">
-                    <GripVertical className="w-5 h-5" />
-                  </div>
-                  <div className="w-16 h-10 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {banner.imageDataUrl ? (
-                      <img src={banner.imageDataUrl} alt={banner.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <ImageIcon className="w-5 h-5 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-foreground text-sm truncate">{banner.title}</p>
-                      <Badge className={cn('text-xs border', banner.active ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted text-muted-foreground border-border')}>
-                        {banner.active ? 'Aktif' : 'Nonaktif'}
-                      </Badge>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 gap-3">
+          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          <span className="text-muted-foreground">Memuat banner dari database...</span>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {banners.map((banner, i) => (
+            <div key={banner.id}>
+              {editing === banner.id ? (
+                <BannerForm
+                  initial={banner}
+                  onSave={(data) => handleEdit(banner.id, data)}
+                  onCancel={() => { setEditing(null); setSaveError(''); }}
+                  saving={saving}
+                />
+              ) : (
+                <div
+                  className={cn('bg-card border rounded-2xl p-4 transition-all', banner.active ? 'border-border' : 'border-border/30 opacity-60')}
+                  draggable
+                  onDragStart={() => { dragItem.current = i; }}
+                  onDragEnter={() => { dragOver.current = i; }}
+                  onDragEnd={handleDragEnd}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="cursor-grab text-muted-foreground flex-shrink-0">
+                      <GripVertical className="w-5 h-5" />
                     </div>
-                    <p className="text-muted-foreground text-xs truncate">{banner.subtitle || 'Tidak ada subtitle'}</p>
-                  </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => setPreview(banner)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Preview">
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => toggleActive(banner)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors" title={banner.active ? 'Nonaktifkan' : 'Aktifkan'}>
-                      {banner.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-primary" />}
-                    </button>
-                    <button onClick={() => { setEditing(banner.id); setAdding(false); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(banner.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-destructive transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="w-16 h-10 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {banner.image_url ? (
+                        <img src={banner.image_url} alt={banner.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-foreground text-sm truncate">{banner.title}</p>
+                        <Badge className={cn('text-xs border', banner.active ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted text-muted-foreground border-border')}>
+                          {banner.active ? 'Aktif' : 'Nonaktif'}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground text-xs truncate">{banner.subtitle || 'Tidak ada subtitle'}</p>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button onClick={() => setPreview(banner)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Preview">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => toggleActive(banner)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors" title={banner.active ? 'Nonaktifkan' : 'Aktifkan'}>
+                        {banner.active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-primary" />}
+                      </button>
+                      <button onClick={() => { setEditing(banner.id); setAdding(false); setSaveError(''); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(banner.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          ))}
+          {banners.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>Belum ada banner. Tambah banner pertama Anda.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {saving && (
+        <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center">
+          <div className="bg-card rounded-2xl p-6 shadow-xl flex items-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <span className="text-foreground font-medium">Menyimpan...</span>
           </div>
-        ))}
-        {banners.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p>Belum ada banner. Tambah banner pertama Anda.</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

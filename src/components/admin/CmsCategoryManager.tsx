@@ -16,6 +16,7 @@ import {
 import { CATEGORIES } from '@/lib/product-slugs';
 import { useImageCrop } from '@/hooks/useImageCrop';
 import type { ImagePresetKey } from '@/components/admin/ImageCropModal';
+import { IMAGE_PRESETS } from '@/lib/image-presets';
 
 // ============================================================
 // TAB
@@ -47,8 +48,9 @@ function ImageUpload({
   preset?:      ImagePresetKey;   // overrides FOLDER_TO_PRESET default
   onUploaded:   (url: string) => void;
 }) {
+  const presetKey = presetOverride ?? FOLDER_TO_PRESET[folder];
   const { triggerCrop, cropModal, uploading, error } = useImageCrop({
-    preset: presetOverride ?? FOLDER_TO_PRESET[folder],
+    preset: presetKey,
     folder,
     onUrl: onUploaded,
   });
@@ -95,6 +97,7 @@ function ImageUpload({
               <X className="w-3 h-3" /> Hapus
             </Button>
           )}
+          <p className="text-xs text-muted-foreground">{IMAGE_PRESETS[presetKey].helpText}</p>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       </div>

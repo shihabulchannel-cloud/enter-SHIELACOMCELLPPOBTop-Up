@@ -417,6 +417,17 @@ body,
     background: linear-gradient(180deg, hsl(142 30% 97%) 0%, hsl(0 0% 100%) 100%);
   }
 
+  /* Hero slider: mobile follows content height; desktop uses fixed clamp height. */
+  .hero-slider-height {
+    height: auto;
+  }
+
+  @media (min-width: 768px) {
+    .hero-slider-height {
+      height: clamp(480px, 36vw, 560px);
+    }
+  }
+
   .opacity-0-init {
     opacity: 0;
   }

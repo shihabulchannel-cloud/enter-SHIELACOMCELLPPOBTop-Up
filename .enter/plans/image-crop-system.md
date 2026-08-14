@@ -99,25 +99,25 @@ Sudah di-scan (`StatsCounter`, `HeroSlider`, layout umum) — tidak ditemukan ov
 
 ## Implementation checklist
 
-- [ ] Migration baru: tabel `sc_banners` + RLS (public select true; insert/update/delete hanya service_role)
-- [ ] `admin-api/index.ts`: tambah action `banner_insert`, `banner_update`, `banner_delete`, `banner_reorder` (murni tambahan, tidak ubah action lama)
-- [ ] `BannerManager.tsx`: pindah dari `bannerStore` (localStorage) ke Supabase (`sc_banners` + admin-api), upload gambar via `folder: 'banners'` → `image_url`
-- [ ] `HeroSlider.tsx`: baca dari `sc_banners` (bukan `bannerStore`) + realtime subscription
-- [ ] `HeroSlider.tsx`: restrukturisasi height (mobile auto / desktop clamp) dan posisi arrow+dots (mobile relatif ke gambar, desktop relatif ke section) — verifikasi di 320/360/375/390/412/480/768/1024px, tombol CTA tidak pernah tertutup dots
-- [ ] `image-presets.ts`: update `logo` → 512×512/2MB, `hero_slide` → 1920×700/3MB, `banner` → 1200×400 (rasio 3:1 tetap)
-- [ ] Tambah help text ukuran gambar (bukan popup) di: `LogoManager`, `BannerManager`, `CmsCategoryManager` (Thumbnail Card & Banner Hero)
-- [ ] `OrderStatus.tsx`: tambah progress timeline 5 langkah, status badge lengkap, ringkasan pembelian dengan breakdown (Kategori, Nominal, Biaya Admin, Total), countdown, card modern — tanpa ubah `order-api.ts`/`check-order`
-- [ ] `Order.tsx` `TARGET_CONFIG`: tambah `voucher`, `aktivasi`; tambah sub-deteksi brand/nama untuk `ppob` (BPJS/PDAM/Telkom/TV); perbaiki teks `pln`
-- [ ] `CaraTransaksi.tsx`: hapus Hero section pertama (duplikat), pertahankan `HowToTransact` apa adanya
+- [passed] Migration baru: tabel `sc_banners` + RLS (public select true; insert/update/delete hanya service_role)
+- [passed] `admin-api/index.ts`: tambah action `banner_insert`, `banner_update`, `banner_delete`, `banner_reorder` (murni tambahan, tidak ubah action lama)
+- [passed] `BannerManager.tsx`: pindah dari `bannerStore` (localStorage) ke Supabase (`sc_banners` + admin-api), upload gambar via `folder: 'banners'` → `image_url`
+- [passed] `HeroSlider.tsx`: baca dari `sc_banners` (bukan `bannerStore`) + realtime subscription
+- [manual-required] `HeroSlider.tsx`: restrukturisasi height (mobile auto / desktop clamp) dan posisi arrow+dots (mobile relatif ke gambar, desktop relatif ke section) — verifikasi di 320/360/375/390/412/480/768/1024px, tombol CTA tidak pernah tertutup dots
+- [passed] `image-presets.ts`: update `logo` → 512×512/2MB, `hero_slide` → 1920×700/3MB, `banner` → 1200×400 (rasio 3:1 tetap)
+- [passed] Tambah help text ukuran gambar (bukan popup) di: `LogoManager`, `BannerManager`, `CmsCategoryManager` (Thumbnail Card & Banner Hero)
+- [passed] `OrderStatus.tsx`: tambah progress timeline 5 langkah, status badge lengkap, ringkasan pembelian dengan breakdown (Kategori, Nominal, Biaya Admin, Total), countdown, card modern — tanpa ubah `order-api.ts`/`check-order`
+- [passed] `Order.tsx` `TARGET_CONFIG`: tambah `voucher`, `aktivasi`; tambah sub-deteksi brand/nama untuk `ppob` (BPJS/PDAM/Telkom/TV); perbaiki teks `pln`
+- [passed] `CaraTransaksi.tsx`: hapus Hero section pertama (duplikat), pertahankan `HowToTransact` apa adanya
 
 ## Verification checklist
 
-- [ ] Upload banner baru di Admin Panel → langsung tampil di Beranda (buka di browser/incognito lain, tanpa refresh manual berkat realtime) — buktikan data dari DB bukan localStorage
-- [ ] Hero Slider di 320px/375px/390px/768px/1024px: badge+judul+subtitle+tombol tidak terpotong, tombol tidak tertutup dots, gambar tidak pecah
-- [ ] Upload Logo, Banner Slider, Thumbnail Kategori, Banner Hero di Admin Panel masing-masing menampilkan help text ukuran yang benar di bawah tombol upload
-- [ ] Order.tsx: beli produk kategori `voucher` dan `aktivasi` → helper text sesuai (bukan fallback "pulsa")
-- [ ] Order.tsx: beli produk `ppob` dengan brand mengandung "BPJS" → hint BPJS; tanpa keyword cocok → hint generik ppob
-- [ ] OrderStatus.tsx: order dengan status pending/paid/success/failed masing-masing menampilkan progress timeline & badge yang sesuai; breakdown Nominal+Biaya Admin+Total sesuai data asli order
-- [ ] CaraTransaksi.tsx: hanya 1 Hero section tampil, timeline animasi & urutan langkah tidak berubah
-- [ ] Regression: Login Admin, Login Customer, Provider Digiflazz, Sinkronisasi Produk, Payment Gateway (Duitku), Checkout, CMS Kategori tetap berfungsi normal tanpa error "Edge Function returned a non-2xx status code"
-- [ ] Lint & build project berhasil tanpa error
+- [manual-required] Upload banner baru di Admin Panel → langsung tampil di Beranda (buka di browser/incognito lain, tanpa refresh manual berkat realtime) — buktikan data dari DB bukan localStorage
+- [manual-required] Hero Slider di 320px/375px/390px/768px/1024px: badge+judul+subtitle+tombol tidak terpotong, tombol tidak tertutup dots, gambar tidak pecah
+- [manual-required] Upload Logo, Banner Slider, Thumbnail Kategori, Banner Hero di Admin Panel masing-masing menampilkan help text ukuran yang benar di bawah tombol upload
+- [passed] Order.tsx: beli produk kategori `voucher` dan `aktivasi` → helper text sesuai (bukan fallback "pulsa")
+- [passed] Order.tsx: beli produk `ppob` dengan brand mengandung "BPJS" → hint BPJS; tanpa keyword cocok → hint generik ppob
+- [manual-required] OrderStatus.tsx: order dengan status pending/paid/success/failed masing-masing menampilkan progress timeline & badge yang sesuai; breakdown Nominal+Biaya Admin+Total sesuai data asli order
+- [passed] CaraTransaksi.tsx: hanya 1 Hero section tampil, timeline animasi & urutan langkah tidak berubah
+- [manual-required] Regression: Login Admin, Login Customer, Provider Digiflazz, Sinkronisasi Produk, Payment Gateway (Duitku), Checkout, CMS Kategori tetap berfungsi normal tanpa error "Edge Function returned a non-2xx status code"
+- [manual-required] Lint & build project berhasil tanpa error

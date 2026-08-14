@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, Globe, FileText, Twitter } from 'lucide-react';
+import { Save, Globe, FileText, Twitter, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,8 @@ import {
 } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { useImageCrop } from '@/hooks/useImageCrop';
+import { IMAGE_PRESETS } from '@/lib/image-presets';
+import { triggerFileInput, readFileAsDataUrl } from '@/lib/image-upload';
 
 type SubSection = 'general' | 'logo' | 'cms' | 'footer' | 'seo' | 'social';
 
@@ -132,9 +134,7 @@ function LogoManager() {
             )}
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-foreground mb-2">Format: PNG, SVG, WEBP</p>
-            <p className="text-xs text-muted-foreground mb-4">Crop 1:1 · Output 200×200 px WebP.</p>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap mb-3">
               <Button onClick={triggerCrop} disabled={uploading} size="sm" className="bg-primary text-primary-foreground rounded-xl gap-2 btn-glow">
                 {uploading ? 'Memproses...' : 'Upload Logo'}
               </Button>
@@ -144,6 +144,7 @@ function LogoManager() {
                 </Button>
               )}
             </div>
+            <p className="text-xs text-muted-foreground">{IMAGE_PRESETS.logo.helpText}</p>
             {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
             {saved && <p className="text-primary text-xs mt-2 font-medium">Logo berhasil diperbarui!</p>}
           </div>

@@ -12,22 +12,6 @@ export default function CaraTransaksi() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <section className="bg-hero-gradient pt-24 pb-16 md:pt-32 md:pb-20">
-          <div className="container mx-auto px-4 text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass mb-4">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-white/90 text-xs font-semibold uppercase tracking-wider">Panduan</span>
-            </div>
-            <h1 className="text-3xl md:text-5xl font-bold text-white mb-4">
-              Cara <span className="text-gradient">Transaksi</span>
-            </h1>
-            <p className="text-white/60 max-w-lg mx-auto text-sm md:text-base">
-              Panduan lengkap cara berbelanja produk digital di SHIELACOM CELL
-            </p>
-          </div>
-        </section>
-
         <HowToTransact />
 
         {/* Help Section */}

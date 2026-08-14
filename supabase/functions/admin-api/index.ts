@@ -148,6 +148,52 @@ Deno.serve(async (req: Request) => {
       return respond({ success: true });
     }
 
+    // ── BANNER SLIDER ─────────────────────────────────────────────────────────
+    // Pola sama dengan product_*: data tersimpan di sc_banners (RLS: public SELECT,
+    // mutasi hanya via service_role). Upload gambar dilakukan terpisah ke Storage
+    // (folder 'banners') oleh frontend; di sini hanya menyimpan image_url.
+
+    if (action === "banner_insert") {
+      const { data } = payload as { data: Record<string, unknown> };
+      const { error } = await supabase.from("sc_banners").insert({
+        ...data,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (error) return respond({ error: error.message }, 500);
+      return respond({ success: true });
+    }
+
+    if (action === "banner_update") {
+      const { id, data } = payload as { id: string; data: Record<string, unknown> };
+      const { error } = await supabase
+        .from("sc_banners")
+        .update({ ...data, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) return respond({ error: error.message }, 500);
+      return respond({ success: true });
+    }
+
+    if (action === "banner_delete") {
+      const { id } = payload as { id: string };
+      const { error } = await supabase.from("sc_banners").delete().eq("id", id);
+      if (error) return respond({ error: error.message }, 500);
+      return respond({ success: true });
+    }
+
+    if (action === "banner_reorder") {
+      const { orders } = payload as { orders: { id: string; display_order: number }[] };
+      const now = new Date().toISOString();
+      const results = await Promise.all(
+        orders.map(({ id, display_order }) =>
+          supabase.from("sc_banners").update({ display_order, updated_at: now }).eq("id", id)
+        ),
+      );
+      const firstError = results.find((r) => r.error);
+      if (firstError?.error) return respond({ error: firstError.error.message }, 500);
+      return respond({ success: true });
+    }
+
     return respond({ error: `Action tidak dikenal: ${action}` }, 400);
 
   } catch (err) {

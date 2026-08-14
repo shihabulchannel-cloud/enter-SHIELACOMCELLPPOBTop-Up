@@ -1,0 +1,49 @@
+CREATE TABLE IF NOT EXISTS sc_banners (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title           text NOT NULL DEFAULT '',
+  subtitle        text DEFAULT '',
+  badge           text DEFAULT '',
+  button1_text    text DEFAULT '',
+  button1_link    text DEFAULT '',
+  button2_text    text DEFAULT '',
+  button2_link    text DEFAULT '',
+  banner_link     text DEFAULT '',
+  image_url       text DEFAULT '',
+  theme           text NOT NULL DEFAULT 'all',
+  active          boolean DEFAULT true,
+  display_order   int  DEFAULT 0,
+  created_at      timestamptz DEFAULT now(),
+  updated_at      timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS sc_banners_active_order
+  ON sc_banners (active, display_order);
+
+ALTER TABLE sc_banners ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public_read_banners"
+  ON sc_banners FOR SELECT USING (true);
+
+CREATE POLICY "service_role_insert_banners"
+  ON sc_banners FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "service_role_update_banners"
+  ON sc_banners FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE POLICY "service_role_delete_banners"
+  ON sc_banners FOR DELETE USING (true);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE sc_banners;
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_sc_banners_updated_at ON sc_banners;
+CREATE TRIGGER set_sc_banners_updated_at
+  BEFORE UPDATE ON sc_banners
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

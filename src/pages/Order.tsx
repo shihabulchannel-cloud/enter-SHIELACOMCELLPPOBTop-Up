@@ -16,8 +16,10 @@ const TARGET_CONFIG: Record<string, { label: string; placeholder: string; hint: 
   pulsa: { label: 'Nomor HP', placeholder: '08xx-xxxx-xxxx', hint: 'Masukkan nomor HP tujuan pengisian pulsa' },
   data: { label: 'Nomor HP', placeholder: '08xx-xxxx-xxxx', hint: 'Masukkan nomor HP tujuan pengisian paket data' },
   ewallet: { label: 'Nomor HP / Akun', placeholder: '08xx-xxxx-xxxx', hint: 'Nomor HP yang terdaftar di e-wallet' },
-  pln: { label: 'Nomor Meter / ID Pelanggan', placeholder: 'Contoh: 123456789012', hint: 'Masukkan nomor meter listrik atau ID pelanggan PLN (10-12 digit)' },
-  ppob: { label: 'ID Pelanggan / Nomor Akun', placeholder: 'Masukkan ID pelanggan', hint: 'Nomor pelanggan atau ID akun layanan' },
+  pln: { label: 'Nomor Meter / ID Pelanggan', placeholder: 'Contoh: 123456789012', hint: 'Masukkan nomor meter listrik atau ID pelanggan PLN (10–12 digit)' },
+  ppob: { label: 'ID Pelanggan / Nomor Akun', placeholder: 'Masukkan ID pelanggan', hint: 'Masukkan ID Pelanggan / Nomor Akun sesuai layanan' },
+  voucher: { label: 'Email / User ID Tujuan', placeholder: 'email@contoh.com atau User ID', hint: 'Masukkan email, User ID, atau nomor HP sesuai jenis voucher yang dibeli (Google Play, Garena, PB Cash, Playstation, dll)' },
+  aktivasi: { label: 'Nomor HP', placeholder: '08xx-xxxx-xxxx', hint: 'Masukkan nomor HP yang akan diaktivasi kartu perdana / paketnya' },
   game: {
     label: 'User ID',
     placeholder: 'Contoh: 989386302',
@@ -28,6 +30,24 @@ const TARGET_CONFIG: Record<string, { label: string; placeholder: string; hint: 
     detailHint: 'Tidak wajib diisi. Isi hanya jika game Anda membutuhkan Zone/Server ID (Mobile Legends, PUBG Mobile, Arena Breakout, dll). Kosongkan jika tidak diperlukan.',
   },
 };
+
+/**
+ * Resolve target config for a product. PPOB is a single category in the database
+ * (BPJS, PDAM, Telkom, TV kabel, dll), so we refine the hint client-side based on
+ * the product brand/name — pure frontend, no schema/provider changes.
+ */
+function getTargetConfig(product: Product): typeof TARGET_CONFIG[string] {
+  const base = TARGET_CONFIG[product.category_id] ?? TARGET_CONFIG.pulsa;
+  if (product.category_id !== 'ppob') return base;
+  const hay = `${product.brand ?? ''} ${product.name ?? ''}`.toUpperCase();
+  if (hay.includes('BPJS'))        return { ...base, hint: 'Masukkan Nomor Virtual Account BPJS' };
+  if (hay.includes('PDAM'))       return { ...base, hint: 'Masukkan ID Pelanggan PDAM' };
+  if (hay.includes('TELKOM') || hay.includes('INDIHOME'))
+    return { ...base, hint: 'Masukkan Nomor Telepon Rumah / ID Pelanggan Indihome' };
+  if (hay.includes('TV') || hay.includes('VISION') || hay.includes('GOL'))
+    return { ...base, hint: 'Masukkan ID Pelanggan / Smart Card' };
+  return base;
+}
 
 type Step = 1 | 2 | 3;
 
@@ -114,7 +134,7 @@ export default function OrderPage() {
 
   if (!product) return null;
 
-  const targetCfg = TARGET_CONFIG[product.category_id] || TARGET_CONFIG.pulsa;
+  const targetCfg = getTargetConfig(product);
   const totalAmount = (selectedMethod?.fee ?? 0) + product.sell_price;
 
   const validateStep1 = () => {

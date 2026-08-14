@@ -3205,6 +3205,60 @@ export type Database = {
         }
         Relationships: []
       }
+      sc_banners: {
+        Row: {
+          active: boolean | null
+          badge: string | null
+          banner_link: string | null
+          button1_link: string | null
+          button1_text: string | null
+          button2_link: string | null
+          button2_text: string | null
+          created_at: string | null
+          display_order: number | null
+          id: string
+          image_url: string | null
+          subtitle: string | null
+          theme: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          badge?: string | null
+          banner_link?: string | null
+          button1_link?: string | null
+          button1_text?: string | null
+          button2_link?: string | null
+          button2_text?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          id?: string
+          image_url?: string | null
+          subtitle?: string | null
+          theme?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          badge?: string | null
+          banner_link?: string | null
+          button1_link?: string | null
+          button1_text?: string | null
+          button2_link?: string | null
+          button2_text?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          id?: string
+          image_url?: string | null
+          subtitle?: string | null
+          theme?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sc_cms_categories: {
         Row: {
           banner_url: string | null
@@ -4004,7 +4058,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_07_10: {
+      messages_2026_08_12: {
         Row: {
           event: string | null
           extension: string
@@ -4037,7 +4091,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_07_11: {
+      messages_2026_08_13: {
         Row: {
           event: string | null
           extension: string
@@ -4070,7 +4124,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_07_12: {
+      messages_2026_08_14: {
         Row: {
           event: string | null
           extension: string
@@ -4103,7 +4157,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_07_13: {
+      messages_2026_08_15: {
         Row: {
           event: string | null
           extension: string
@@ -4136,7 +4190,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_07_14: {
+      messages_2026_08_16: {
         Row: {
           event: string | null
           extension: string
@@ -4169,40 +4223,7 @@ export type Database = {
         }
         Relationships: []
       }
-      messages_2026_07_15: {
-        Row: {
-          event: string | null
-          extension: string
-          id: string
-          inserted_at: string
-          payload: Json | null
-          private: boolean | null
-          topic: string
-          updated_at: string
-        }
-        Insert: {
-          event?: string | null
-          extension: string
-          id?: string
-          inserted_at?: string
-          payload?: Json | null
-          private?: boolean | null
-          topic: string
-          updated_at?: string
-        }
-        Update: {
-          event?: string | null
-          extension?: string
-          id?: string
-          inserted_at?: string
-          payload?: Json | null
-          private?: boolean | null
-          topic?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      messages_2026_07_16: {
+      messages_2026_08_17: {
         Row: {
           event: string | null
           extension: string
